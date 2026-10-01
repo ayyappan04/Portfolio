@@ -1,0 +1,1734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TEG Loop Simulator</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: control-room HMI. 3D plant stage + instrument panel on top, telemetry deck below.
+   Deliberately single dark theme: a plant view read like an operator screen. */
+:root{
+  --bg:#0c1117; --scene:#0f151c; --ground:#121a22; --grid:#1f2a35; --floor:#18222c;
+  --panel:#141b23; --panel-2:#1a232d; --raise:#212c38; --line:#27313d; --line-2:#344150;
+  --fg:#e3e9ef; --fg-2:#a6b3c1; --muted:#738396;
+  --amber:#f0b44c; --amber-ink:#1b1305;
+  --s-hot:#e06a35; --s-cool:#4a8ede; --s-power:#c08a1e; --s-soc:#1f9a88;
+  --good:#4cc38a; --warn:#e3b341; --bad:#f0625a;
+  --tag-bg:rgba(12,17,23,.84);
+  --f-display:'Barlow Condensed','Arial Narrow',system-ui,sans-serif;
+  --f-body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--fg)}
+body{font:14px/1.45 var(--f-body);-webkit-font-smoothing:antialiased}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.app{max-width:1720px;margin:0 auto;padding-inline:16px;padding-block:12px 40px;display:flex;flex-direction:column;gap:12px}
+
+/* header */
+.bar{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:12px;align-items:center;min-width:0}
+.mark{width:34px;height:34px;border-radius:7px;flex:none;background:linear-gradient(90deg,#2f5fd0,#2fb3d6 25%,#9fd36b 45%,#f2c14e 65%,#f07b3f 82%,#d6384a)}
+.brand h1{font:700 24px/1 var(--f-display);letter-spacing:.03em;text-transform:uppercase;margin:0}
+.brand p{margin:3px 0 0;color:var(--fg-2);font-size:13px}
+.bar-ctl{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
+.lbl{font:600 11px/1 var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+select{background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;padding:6px 28px 6px 10px;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--fg-2) 50%),linear-gradient(135deg,var(--fg-2) 50%,transparent 50%);
+  background-position:calc(100% - 14px) 52%,calc(100% - 9px) 52%;background-size:5px 5px;background-repeat:no-repeat;max-width:100%}
+.btn{background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;padding:6px 12px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.btn:hover{background:var(--raise)}
+.btn.primary{background:var(--amber);color:var(--amber-ink);border-color:var(--amber);font-weight:600}
+.clock{font:500 13px/1 var(--f-mono);color:var(--fg-2);padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* work area */
+.work{display:grid;grid-template-columns:minmax(0,1fr) 392px;gap:12px;height:clamp(480px,70vh,860px)}
+.stage{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--scene);min-width:0}
+#scene{position:absolute;inset:0}
+#scene canvas{display:block;width:100%;height:100%;touch-action:none}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.tag{position:absolute;left:0;top:0;background:var(--tag-bg);border:1px solid var(--line-2);border-radius:6px;padding:5px 8px;white-space:nowrap;
+  font-size:12px;line-height:1.25;transform-origin:0 100%;will-change:transform;pointer-events:auto;cursor:pointer}
+.tag b{display:block;font:600 11px/1.1 var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-2);margin-bottom:2px}
+.tag span{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.tag.sel{border-color:var(--amber)}
+.stage-tools{position:absolute;left:10px;top:10px;display:flex;flex-wrap:wrap;gap:6px;max-width:calc(100% - 20px)}
+.stage-tools .btn{padding:5px 10px;font-size:12px;background:var(--tag-bg)}
+.stage-tools .btn[aria-pressed="true"]{border-color:var(--amber);color:var(--amber)}
+.tlegend{position:absolute;right:10px;bottom:10px;background:var(--tag-bg);border:1px solid var(--line-2);border-radius:6px;padding:6px 8px;font:500 11px var(--f-mono);color:var(--fg-2)}
+.tlegend i{display:block;width:170px;height:8px;border-radius:2px;margin:4px 0 3px;background:linear-gradient(90deg,#2f5fd0,#2fb3d6 20%,#9fd36b 40%,#f2c14e 60%,#f07b3f 80%,#d6384a)}
+.tlegend div{display:flex;justify-content:space-between}
+.vis-note{position:absolute;left:10px;bottom:10px;font-size:12px;color:var(--muted);max-width:55%}
+
+/* panel */
+.panel{border:1px solid var(--line);border-radius:10px;background:var(--panel);display:flex;flex-direction:column;min-height:0;min-width:0}
+.tabs{display:flex;overflow-x:auto;border-bottom:1px solid var(--line);flex:none;scrollbar-width:none}
+  .tabs button{flex:1 0 auto;background:none;border:0;border-bottom:2px solid transparent;padding:11px 7px 9px;cursor:pointer;
+  font:600 12px/1 var(--f-display);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--amber)}
+.tabs button:hover{color:var(--fg)}
+#controls{overflow-y:auto;padding:6px 16px 28px;display:flex;flex-direction:column;gap:12px;min-height:0;scrollbar-color:var(--line-2) transparent}
+.gh{font:600 12px/1 var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.gh:first-child{border-top:0;margin-top:6px;padding-top:4px}
+.ctl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;align-items:center}
+.ctl label{font-size:13px;color:var(--fg);min-width:0}
+.ctl .u{color:var(--muted);font-size:12px;margin-left:4px}
+.ctl .hint{grid-column:1/-1;color:var(--muted);font-size:12px;line-height:1.35}
+.ctl input[type=number]{width:92px;background:var(--panel-2);border:1px solid var(--line-2);border-radius:5px;padding:4px 6px;text-align:right;font:500 13px var(--f-mono);font-variant-numeric:tabular-nums}
+.ctl input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--amber);margin:0}
+.ctl select{grid-column:1/-1;width:100%}
+.seg{grid-column:1/-1;display:flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden}
+.seg button{flex:1;background:var(--panel-2);border:0;padding:6px 8px;cursor:pointer;font-size:13px;color:var(--fg-2)}
+.seg button+button{border-left:1px solid var(--line-2)}
+.seg button[aria-pressed="true"]{background:var(--raise);color:var(--fg);box-shadow:inset 0 -2px 0 var(--amber)}
+.tog{display:flex;gap:10px;align-items:center;cursor:pointer;font-size:13px}
+.tog input{accent-color:var(--amber);width:16px;height:16px}
+.info{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;font-size:12.5px}
+.info dt{color:var(--fg-2)} .info dd{margin:0;text-align:right;font:500 12.5px var(--f-mono);font-variant-numeric:tabular-nums}
+.info .full{grid-column:1/-1;color:var(--muted)}
+
+/* deck */
+.deck{display:flex;flex-direction:column;gap:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kpi{background:var(--panel);padding:12px 14px;min-width:0}
+.kpi .k{font:600 11px/1.1 var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font:500 22px/1.2 var(--f-mono);margin-top:6px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .s{color:var(--fg-2);font-size:12px;margin-top:2px}
+.kpi.power .v{color:var(--amber)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,540px),1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px 16px;min-width:0}
+.card h2{font:600 15px/1.1 var(--f-display);letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px}
+.card .sub{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+.card h3{font:600 12px/1 var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--fg-2);margin:18px 0 8px}
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.checks li{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)}
+.checks li:first-child{border-top:0}
+.chip{font:600 11px/1 var(--f-display);letter-spacing:.08em;text-transform:uppercase;padding:4px 6px;border-radius:4px;text-align:center;border:1px solid}
+.chip.pass{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
+.chip.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.chip.fail{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 55%,transparent);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.checks .n{min-width:0} .checks .n small{display:block;color:var(--muted);font-size:12px}
+.checks .val{font:500 12.5px var(--f-mono);color:var(--fg-2);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.chain{display:flex;flex-direction:column;gap:6px}
+.chain .row{display:grid;grid-template-columns:minmax(0,1.3fr) 96px minmax(60px,1fr) 58px;gap:10px;align-items:center;font-size:13px}
+.chain .row .v{font:500 13px var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.chain .row .p{font:500 12px var(--f-mono);color:var(--muted);text-align:right}
+.chain .bar{height:8px;background:var(--panel-2);border-radius:2px;overflow:hidden}
+.chain .bar i{display:block;height:100%;background:var(--fg-2);border-radius:2px}
+.chain .row.el .bar i{background:var(--amber)}
+.rbar{display:flex;height:30px;border-radius:4px;overflow:hidden;gap:2px;background:var(--bg)}
+.rbar div{min-width:2px;display:flex;align-items:center;justify-content:center;font:500 11px var(--f-mono);color:var(--bg);overflow:hidden;white-space:nowrap}
+.rkey{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:12px;color:var(--fg-2)}
+.rkey span{display:inline-flex;gap:6px;align-items:center}
+.rkey i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.rnote{margin:10px 0 0;font-size:13px;color:var(--fg-2)}
+.tablewrap{overflow-x:auto;margin-inline:-4px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:640px}
+th{font:600 11px/1.2 var(--f-display);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px;border-bottom:1px solid var(--line-2);vertical-align:bottom}
+th:first-child,td:first-child{text-align:left}
+td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .rg{display:inline-block;font:600 10px/1 var(--f-display);letter-spacing:.07em;text-transform:uppercase;padding:3px 5px;border-radius:3px;margin-left:6px;border:1px solid var(--line-2);color:var(--fg-2)}
+td .rg.lam{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+td .rg.tra{color:var(--amber)}
+.details{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:4px 28px;margin:0}
+.details div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+.details dt{color:var(--fg-2)} .details dd{margin:0;font:500 12.5px var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.chart{position:relative;margin-top:10px}
+.chart h4{font:600 12px/1 var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-2);margin:0 0 4px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
+.chart h4 .lg{font:500 12px var(--f-body);letter-spacing:0;text-transform:none;color:var(--fg-2);display:inline-flex;gap:6px;align-items:center}
+.chart h4 .lg i{width:12px;height:2px;display:inline-block;border-radius:1px}
+.chart canvas{width:100%;height:112px;display:block}
+.tip{position:absolute;pointer-events:none;background:var(--raise);border:1px solid var(--line-2);border-radius:6px;padding:6px 8px;font-size:12px;white-space:nowrap;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.tip b{font:500 12px var(--f-mono);display:block;margin-bottom:2px;color:var(--fg-2)}
+.tip span{display:flex;gap:6px;align-items:center;font-family:var(--f-mono)}
+.tip i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.summary{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:10px;font-size:13px;color:var(--fg-2)}
+.summary b{font:500 13px var(--f-mono);color:var(--fg)}
+.foot{color:var(--muted);font-size:12.5px;line-height:1.55;max-width:110ch}
+.foot b{color:var(--fg-2);font-weight:600}
+.warnline{margin:8px 0 0;padding:8px 10px;border-radius:6px;border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);color:var(--warn);font-size:12.5px}
+
+@media (max-width:1000px){
+  .work{grid-template-columns:1fr;height:auto}
+  .stage{height:58vh;min-height:340px}
+  #controls{overflow:visible}
+  .vis-note{display:none}
+}
+@media (max-width:600px){
+  .tag span{display:none} .tag{padding:3px 6px} .tag b{margin:0}
+}
+@media (max-width:520px){
+  .chain .row{grid-template-columns:minmax(0,1fr) 84px 50px}
+  .chain .row .bar{display:none}
+  .tlegend i{width:120px}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <h1>TEG Loop Simulator</h1>
+        <p>Data hall → shell-and-tube heat exchanger → thermoelectric array → battery → back to the IT bus</p>
+      </div>
+    </div>
+    <div class="bar-ctl">
+      <span class="lbl">Scenario</span>
+      <select id="scenario" aria-label="Scenario preset">
+        <option value="base">Proposal baseline · Solution C</option>
+        <option value="solA">Solution A · rack exhaust air</option>
+        <option value="solB">Solution B · coolant bypass stack</option>
+        <option value="warm">Warm-water W45 · chilled-water sink</option>
+      </select>
+      <button class="btn primary" id="play" type="button">Pause</button>
+      <select id="speed" aria-label="Simulation speed">
+        <option value="1">1 h / s</option>
+        <option value="6" selected>6 h / s</option>
+        <option value="24">1 day / s</option>
+        <option value="168">1 week / s</option>
+      </select>
+      <span class="clock" id="clock">—</span>
+    </div>
+  </header>
+
+  <div class="work">
+    <section class="stage" aria-label="3D plant view">
+      <div id="scene"></div>
+      <div id="labels"></div>
+      <div class="stage-tools">
+        <button class="btn" type="button" data-view="overview">Overview</button>
+        <button class="btn" type="button" data-view="hx">Heat exchanger</button>
+        <button class="btn" type="button" data-view="teg">TEG array</button>
+        <button class="btn" type="button" data-view="bat">Battery</button>
+        <button class="btn" type="button" id="cut" aria-pressed="false">Cutaway</button>
+      </div>
+      <div class="vis-note" id="visNote"></div>
+      <div class="tlegend" aria-hidden="true">Fluid temperature<i></i><div><span>10 °C</span><span>40</span><span>70 °C</span></div></div>
+    </section>
+
+    <aside class="panel" aria-label="Design parameters">
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="dc" aria-selected="true">Data hall</button>
+        <button role="tab" data-tab="hx" aria-selected="false">Exchanger</button>
+        <button role="tab" data-tab="teg" aria-selected="false">TEG</button>
+        <button role="tab" data-tab="bat" aria-selected="false">Battery</button>
+        <button role="tab" data-tab="econ" aria-selected="false">Cost</button>
+      </nav>
+      <div id="controls" role="tabpanel"></div>
+    </aside>
+  </div>
+
+  <section class="deck">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="grid2">
+      <article class="card">
+        <h2>Design constraints</h2>
+        <p class="sub">From the CHE 383 proposal, checked at the worst case: peak IT load and the warmest facility water of the year.</p>
+        <ul class="checks" id="checks"></ul>
+      </article>
+      <article class="card">
+        <h2>Energy chain · this hour</h2>
+        <p class="sub">Each stage as a share of the one before it. Bars use a log scale so watts and megawatts fit on one line.</p>
+        <div class="chain" id="chain"></div>
+        <h3>Where the temperature difference goes</h3>
+        <div class="rbar" id="rbar"></div>
+        <div class="rkey" id="rkey"></div>
+        <p class="rnote" id="rnote"></p>
+      </article>
+    </div>
+
+    <div class="grid2">
+      <article class="card">
+        <h2>Heat exchanger by shell</h2>
+        <p class="sub">ε-NTU per shell with temperature-dependent viscosity, so the flow regime can change from shell to shell. Hot and cold streams run counter-current between shells.</p>
+        <div class="tablewrap"><table id="shellTable"></table></div>
+        <div id="hxWarn"></div>
+      </article>
+      <article class="card">
+        <h2>TEG array and battery</h2>
+        <p class="sub">Module values at this hour; design values at the worst case.</p>
+        <dl class="details" id="details"></dl>
+      </article>
+    </div>
+
+    <div class="grid2">
+      <article class="card">
+        <h2>Last 7 days</h2>
+        <p class="sub">Hourly simulation. Changing a parameter re-runs the week under the new design.</p>
+        <div class="chart"><h4>TEG net output (W)</h4><canvas id="chP" aria-label="TEG net output over the last week"></canvas></div>
+        <div class="chart"><h4>Battery state of charge (%)</h4><canvas id="chS" aria-label="Battery state of charge over the last week"></canvas></div>
+        <div class="chart"><h4>Coolant temperature (°C) <span class="lg"><i style="background:var(--s-hot)"></i>Return from IT</span><span class="lg"><i style="background:var(--s-cool)"></i>Supply to IT</span></h4><canvas id="chT" aria-label="Coolant return and supply temperature over the last week"></canvas></div>
+      </article>
+      <article class="card">
+        <h2>Lifetime projection</h2>
+        <p class="sub" id="projSub">Twelve representative months per year, with TEG output decay and battery ageing.</p>
+        <div class="chart"><h4>Energy delivered to the IT bus (kWh per year)</h4><canvas id="chE" aria-label="Annual energy delivered"></canvas></div>
+        <div class="chart"><h4>Cumulative cash position ($)</h4><canvas id="chC" aria-label="Cumulative cash position"></canvas></div>
+        <div class="summary" id="projSummary"></div>
+      </article>
+    </div>
+
+    <p class="foot"><b>Model.</b> Steady state each hour, solved so the heat exchanger plus the TEGs reject exactly the heat the IT load puts into the liquid loop. Tube side: Gnielinski (turbulent) and Sieder–Tate (laminar) with Petukhov friction. Shell side: Kern's method. Bundle diameter from standard tube-count constants. TEG: 1-D module model with Peltier and Joule terms, contact resistance, substrates, interface material and heat-sink resistance in series, solved for junction temperatures. Thermoelectric properties are held at ~50 °C values. Material presets for Type I, Type II and the commercial baseline follow Nozariasbmarz et al., <i>iScience</i> 23, 101340 (2020). Liquid-cooling classes follow ASHRAE TC 9.9. Costs, battery data and tariff values are editable estimates, not quotes. The default grid factor is the proposal's national figure; Ontario's grid is much cleaner, so lower it for an Ontario site.</p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* CORE:BEGIN */
+const C2K = 273.15;
+const FLUIDS = {
+  water: { name: 'Water', rho: 992, cp: 4179, k: 0.63, mu40: 6.53e-4, B: 1800 },
+  pg25:  { name: 'Propylene glycol 25 %', rho: 1018, cp: 3900, k: 0.50, mu40: 1.25e-3, B: 2300 },
+  pg40:  { name: 'Propylene glycol 40 %', rho: 1032, cp: 3650, k: 0.43, mu40: 2.1e-3, B: 2600 },
+  imm:   { name: 'Dielectric immersion fluid (~8 cSt)', rho: 800, cp: 2240, k: 0.14, mu40: 6.4e-3, B: 2200 }
+};
+const COOLING = {
+  air:       { name: 'Air · CRAH with chilled water', capture: 1.0, itLimit: 21, facLimit: null, airApproach: 6, rackDens: 10, fluid: 'water' },
+  rdhx:      { name: 'Rear-door heat exchangers', capture: 0.9, itLimit: 22, facLimit: null, airApproach: 5, rackDens: 25, fluid: 'water' },
+  d2c32:     { name: 'Direct-to-chip liquid · W32 class', capture: 0.75, itLimit: 40, facLimit: 32, rackDens: 40, fluid: 'pg25' },
+  d2c45:     { name: 'Direct-to-chip liquid · W45 class', capture: 0.8, itLimit: 50, facLimit: 45, rackDens: 60, fluid: 'pg25' },
+  immersion: { name: 'Single-phase immersion', capture: 0.95, itLimit: 45, facLimit: 40, rackDens: 80, fluid: 'imm' }
+};
+const MATERIALS = {
+  ss316: { name: 'Stainless steel 316', k: 16.3, color: '#9aa4ad' },
+  cs:    { name: 'Carbon steel', k: 45, color: '#6f757c' },
+  cu:    { name: 'Copper', k: 385, color: '#c7794a' },
+  brass: { name: 'Admiralty brass', k: 111, color: '#c9a653' },
+  cuni:  { name: 'Copper-nickel 90/10', k: 50, color: '#b78d78' },
+  ti:    { name: 'Titanium grade 2', k: 21.9, color: '#8f98a6' },
+  al:    { name: 'Aluminium 6061', k: 167, color: '#c3c9cf' }
+};
+const ARRS = { counter: 'Counterflow', parallel: 'Parallel flow', tema_e: 'TEMA E · 1 shell pass, 2n tube passes', cross: 'Crossflow' };
+// Seebeck µV/K (n given as magnitude), resistivity µΩ·m, thermal conductivity W/m·K, at ~50 °C
+const TEMATS = {
+  bite_comm:   { name: 'Bi₂Te₃ · commercial crystal (baseline)', Sp: 225, Sn: 185, rp: 12.5, rn: 10, kp: 1.35, kn: 1.5, maxT: 200, degr: 1.0 },
+  bite_t2:     { name: 'Bi₂Te₃ · Type II, Nozariasbmarz 2020', Sp: 205, Sn: 185, rp: 10, rn: 12.2, kp: 1.1, kn: 1.0, maxT: 250, degr: 1.5 },
+  bite_t1:     { name: 'Bi₂Te₃ · Type I, Nozariasbmarz 2020', Sp: 260, Sn: 220, rp: 22, rn: 18, kp: 0.8, kn: 0.95, maxT: 250, degr: 1.5 },
+  bite_budget: { name: 'Bi₂Te₃ · low-cost Peltier module', Sp: 190, Sn: 180, rp: 11, rn: 11, kp: 1.6, kn: 1.6, maxT: 150, degr: 2.0 },
+  mgsb:        { name: 'MgAgSb / Mg₃(Sb,Bi)₂ · tellurium-free', Sp: 210, Sn: 230, rp: 15, rn: 18, kp: 0.9, kn: 1.0, maxT: 300, degr: 2.5 },
+  hh:          { name: 'Half-Heusler · high-temperature material', Sp: 150, Sn: 150, rp: 10, rn: 10, kp: 4.0, kn: 4.0, maxT: 600, degr: 0.5 },
+  custom:      { name: 'Custom properties', maxT: 200 }
+};
+const TIMS = {
+  pcm: { name: 'Phase-change pad', r: 1.2e-5 }, grease: { name: 'Thermal grease', r: 2.0e-5 },
+  graphite: { name: 'Graphite sheet', r: 3.0e-5 }, indium: { name: 'Indium foil', r: 0.5e-5 }, gappad: { name: 'Silicone gap pad', r: 1.5e-4 }
+};
+const SUBSTRATES = { aln: { name: 'AlN ceramic, 0.6 mm', k: 170 }, alumina: { name: 'Al₂O₃ ceramic, 0.6 mm', k: 25 } };
+const SINKS = {
+  natural:   { name: 'Finned sink · natural convection', R: 1.6, fan: 0 },
+  forced:    { name: 'Finned sink · forced air', R: 0.4, fan: 0.1 },
+  coldplate: { name: 'Cold plate on facility water', R: 0.12, fan: 0 }
+};
+const LOCS = {
+  A:  'A · Server exhaust air (rack rear)',
+  B:  'B · Bypass cold-plate stack on the coolant',
+  C1: 'C · Heat-exchanger shell exterior',
+  C2: 'C · Channel head (tube-side inlet)',
+  C3: 'C · Wrapped on the hot return pipe'
+};
+const CHEMS = {
+  lfp:   { name: 'LFP · lithium iron phosphate', V: 3.2, rt: 95, cycles: 6000, cal: 15, crate: 0.5, cost: 350, selfd: 2 },
+  nmc:   { name: 'NMC · nickel manganese cobalt', V: 3.65, rt: 93, cycles: 2000, cal: 10, crate: 1, cost: 300, selfd: 2 },
+  lto:   { name: 'LTO · lithium titanate', V: 2.3, rt: 96, cycles: 15000, cal: 20, crate: 2, cost: 900, selfd: 1.5 },
+  naion: { name: 'Sodium-ion', V: 3.1, rt: 92, cycles: 4000, cal: 12, crate: 0.5, cost: 280, selfd: 3 },
+  vrla:  { name: 'Lead-acid · VRLA', V: 2.0, rt: 80, cycles: 600, cal: 6, crate: 0.2, cost: 200, selfd: 3 },
+  vrfb:  { name: 'Vanadium redox flow', V: 1.4, rt: 72, cycles: 20000, cal: 20, crate: 0.25, cost: 500, selfd: 1, flow: true, whL: 20 }
+};
+const DISPATCH = {
+  passthrough: 'Pass-through · TEG feeds the bus directly',
+  store: 'Store, then trickle back at a fixed rate',
+  tou: 'Time-of-use · charge off-peak, discharge on-peak',
+  reserve: 'Backup reserve · hold charge for ride-through'
+};
+
+function props(fl, T) {
+  const mu = fl.mu40 * Math.exp(fl.B * (1 / (T + C2K) - 1 / 313.15));
+  return { rho: fl.rho, cp: fl.cp, k: fl.k, mu, Pr: mu * fl.cp / fl.k };
+}
+function regime(Re) { return Re < 2300 ? 'lam' : Re < 4000 ? 'tra' : 'tur'; }
+
+function tubeFlow(p, v, D, L) {
+  const Re = Math.max(1, p.rho * v * D / p.mu);
+  const lam = () => Math.max(3.66, 1.86 * Math.cbrt(Re * p.Pr * D / Math.max(L, 1e-3)));
+  const turb = R => { const f = Math.pow(0.79 * Math.log(R) - 1.64, -2);
+    return { Nu: (f / 8) * (R - 1000) * p.Pr / (1 + 12.7 * Math.sqrt(f / 8) * (Math.pow(p.Pr, 2 / 3) - 1)), f }; };
+  let Nu, f;
+  if (Re < 2300) { Nu = lam(); f = 64 / Re; }
+  else if (Re < 3000) { const w = (Re - 2300) / 700, t = turb(3000); Nu = (1 - w) * lam() + w * t.Nu; f = (1 - w) * 64 / 2300 + w * t.f; }
+  else { const t = turb(Re); Nu = t.Nu; f = t.f; }
+  return { Re, Nu, f, h: Nu * p.k / D };
+}
+
+function hxGeometry(s) {
+  const Do = s.od / 1000, t = Math.min(s.wall / 1000, Do * 0.3), Di = Do - 2 * t, L = s.length, Nt = Math.round(s.Nt), Np = +s.passes;
+  const Pt = s.pitchR * Do;
+  const K = s.layout === 'tri'
+    ? { 1: [0.319, 2.142], 2: [0.249, 2.207], 4: [0.175, 2.285], 6: [0.0743, 2.499], 8: [0.0365, 2.675] }
+    : { 1: [0.215, 2.207], 2: [0.156, 2.291], 4: [0.158, 2.263], 6: [0.0402, 2.617], 8: [0.0331, 2.643] };
+  const [K1, n1] = K[Np];
+  const Db = Do * Math.pow(Nt / K1, 1 / n1);
+  const Ds = Db * 1.02 + 0.04;
+  const B = Math.max(0.05, s.bafflePct / 100 * Ds);
+  const nBaff = Math.max(1, Math.floor(L / B) - 1);
+  const De = s.layout === 'tri'
+    ? 4 * (0.43 * Pt * Pt - 0.5 * Math.PI * Do * Do / 4) / (0.5 * Math.PI * Do)
+    : 4 * (Pt * Pt - Math.PI * Do * Do / 4) / (Math.PI * Do);
+  const As = (Pt - Do) * Ds * B / Pt;
+  const Aflow_t = (Nt / Np) * Math.PI * Di * Di / 4;
+  const Ao = Nt * Math.PI * Do * L;
+  return { Do, Di, t, L, Nt, Np, Pt, Db, Ds, B, nBaff, De, As, Aflow_t, Ao };
+}
+
+function shellCoeffs(g, flT, flS, mT, mS, Tt, Ts) {
+  const pt = props(flT, Tt), ps = props(flS, Ts);
+  const vt = mT / pt.rho / g.Aflow_t;
+  const tf = tubeFlow(pt, vt, g.Di, g.L * g.Np);
+  const Gs = mS / g.As, us = Gs / ps.rho;
+  const Res = Math.max(1, Gs * g.De / ps.mu);
+  const hs = 0.36 * Math.pow(Res, 0.55) * Math.cbrt(ps.Pr) * ps.k / g.De;
+  const dPt = g.Np * (tf.f * g.L / g.Di + 4) * pt.rho * vt * vt / 2;
+  const fs = Math.exp(0.576 - 0.19 * Math.log(Res));
+  const dPs = fs * Gs * Gs * g.Ds * (g.nBaff + 1) / (2 * ps.rho * g.De);
+  return { vt, Ret: tf.Re, ht: tf.h, us, Res, hs, dPt, dPs };
+}
+
+function effectiveness(arr, N, Cr) {
+  if (N <= 0) return 0;
+  if (Cr < 1e-6) return 1 - Math.exp(-N);
+  switch (arr) {
+    case 'counter': { if (Math.abs(1 - Cr) < 1e-6) return N / (1 + N); const e = Math.exp(-N * (1 - Cr)); return (1 - e) / (1 - Cr * e); }
+    case 'parallel': return (1 - Math.exp(-N * (1 + Cr))) / (1 + Cr);
+    case 'cross': return 1 - Math.exp(Math.pow(N, 0.22) / Cr * (Math.exp(-Cr * Math.pow(N, 0.78)) - 1));
+    default: { const r = Math.sqrt(1 + Cr * Cr), e = Math.exp(-N * r); return 2 / (1 + Cr + r * (1 + e) / (1 - e)); }
+  }
+}
+
+function solveHX(s, g, Thin, Tcin, mH, mC, flH, flC) {
+  const N = s.nShells, hotTube = s.hotSide === 'tube';
+  const flT = hotTube ? flH : flC, flS = hotTube ? flC : flH;
+  const mT = hotTube ? mH : mC, mS = hotTube ? mC : mH;
+  const Ch = mH * flH.cp, Cc = mC * flC.cp, Cmin = Math.min(Ch, Cc), Cr = Cmin / Math.max(Ch, Cc);
+  const Rw = g.Do * Math.log(g.Do / g.Di) / (2 * MATERIALS[s.hxMat].k);
+  const RfH = s.foulHot * 1e-4, RfC = s.foulCold * 1e-4;
+  const Rft = hotTube ? RfH : RfC, Rfs = hotTube ? RfC : RfH;
+  const hOut = new Array(N).fill(Thin), cOut = new Array(N).fill(Tcin), sh = new Array(N);
+  for (let it = 0; it < 60; it++) {
+    let d = 0;
+    for (let i = 0; i < N; i++) {
+      const hi = i === 0 ? Thin : hOut[i - 1], ci = i === N - 1 ? Tcin : cOut[i + 1];
+      const Thm = (hi + hOut[i]) / 2, Tcm = (ci + cOut[i]) / 2;
+      const c = shellCoeffs(g, flT, flS, mT, mS, hotTube ? Thm : Tcm, hotTube ? Tcm : Thm);
+      const ht = s.hOverride ? s.hTube : c.ht, hs = s.hOverride ? s.hShell : c.hs;
+      const U = 1 / (1 / hs + Rfs + Rw + (g.Do / g.Di) * (Rft + 1 / ht));
+      const UA = U * g.Ao, NTU = UA / Cmin, eps = effectiveness(s['arr' + i], NTU, Cr);
+      const Q = eps * Cmin * (hi - ci);
+      const nh = hi - Q / Ch, nc = ci + Q / Cc;
+      d = Math.max(d, Math.abs(nh - hOut[i]), Math.abs(nc - cOut[i]));
+      hOut[i] = nh; cOut[i] = nc;
+      sh[i] = { ...c, ht, hs, U, UA, NTU, eps, Q, hIn: hi, hOut: nh, cIn: ci, cOut: nc, arr: s['arr' + i] };
+    }
+    if (d < 1e-4) break;
+  }
+  let dPt = 0, dPs = 0; sh.forEach(x => { dPt += x.dPt; dPs += x.dPs; });
+  return { shells: sh, Q: Ch * (Thin - hOut[N - 1]), ThOut: hOut[N - 1], TcOut: cOut[0], dPt, dPs, Ch, Cc, Rw };
+}
+
+function tegModule(s, TfC, TsC, Rh, Rc, degr) {
+  const a = Math.pow(s.legSide / 1000, 2), Ll = s.legLen / 1000, N = s.couples;
+  const alpha = N * (s.Sp + s.Sn) * 1e-6 * Math.sqrt(degr);
+  const R = N * ((s.rp + s.rn) * 1e-6 * Ll / a + 4 * s.contact * 1e-10 / a);
+  const K = N * (s.kp + s.kn) * a / Ll;
+  const m = s.mppt ? 1 : s.loadRatio;
+  const TfK = TfC + C2K, TsK = TsC + C2K;
+  let Th = TfK - (TfK - TsK) * 0.15, Tc = TsK + (TfK - TsK) * 0.15, I = 0, Qh = 0, Qc = 0;
+  for (let k = 0; k < 120; k++) {
+    const dT = Th - Tc;
+    I = alpha * dT / (R * (1 + m));
+    Qh = alpha * I * Th + K * dT - 0.5 * I * I * R;
+    Qc = alpha * I * Tc + K * dT + 0.5 * I * I * R;
+    const nTh = TfK - Qh * Rh, nTc = TsK + Qc * Rc;
+    const dd = Math.abs(nTh - Th) + Math.abs(nTc - Tc);
+    Th += 0.6 * (nTh - Th); Tc += 0.6 * (nTc - Tc);
+    if (dd < 1e-7) break;
+  }
+  const P = I * I * R * m, dTj = Th - Tc, Tm = (Th + Tc) / 2;
+  return { P, Qh, Qc, I, V: I * R * m, Voc: alpha * dTj, alpha, R, K, dTj, Thj: Th - C2K, Tcj: Tc - C2K,
+    ZT: alpha * alpha / (R * K) * Tm, eta: Qh !== 0 ? P / Math.abs(Qh) : 0, carnot: Math.abs(dTj) / Math.max(Th, Tc) };
+}
+
+function tegArray(s, g, hx, Th, Tcin, mHot, flH, degr, pIT) {
+  const side = s.modSide / 1000, Amod = side * side;
+  const Rsub = 0.0006 / (SUBSTRATES[s.substrate].k * Amod), Rtim = TIMS[s.tim].r / Amod;
+  const kmat = MATERIALS[s.hxMat].k, hotTube = s.hotSide === 'tube', sh = hx.shells;
+  const Tsink = s.sink === 'coldplate' ? Tcin + 1 : (s.location === 'A' ? s.coldAisle : s.ambient);
+  let loc;
+  switch (s.location) {
+    case 'A': {
+      const racks = Math.max(1, Math.round(pIT / s.rackDens));
+      loc = { avail: racks * 0.6 * 2.0 * 0.7, T: s.coldAisle + s.serverDT, Rconv: s.hotFinR, Rwall: 0, fromLoop: false, mSide: 0, hot: 'Rack exhaust air' };
+      break;
+    }
+    case 'B': loc = { avail: Infinity, T: Th, fromLoop: true, mSide: mHot * s.bypassPct / 100, hot: 'Diverted return coolant' }; break;
+    case 'C1': {
+      const mean = sh.reduce((a, x) => a + (hotTube ? (x.cIn + x.cOut) : (x.hIn + x.hOut)) / 2, 0) / sh.length;
+      const hs = sh.reduce((a, x) => a + x.hs, 0) / sh.length;
+      loc = { avail: s.nShells * Math.PI * g.Ds * g.L * 0.7, T: mean, Rconv: 1 / (hs * Amod), Rwall: s.shellWall / 1000 / (kmat * Amod),
+        fromLoop: !hotTube, mSide: mHot, hot: hotTube ? 'Facility water in the shell' : 'Return coolant in the shell', wrongStream: hotTube };
+      break;
+    }
+    case 'C2': {
+      const x = hotTube ? sh[0] : sh[sh.length - 1];
+      loc = { avail: (Math.PI * g.Ds * 0.35 * g.Ds + Math.PI * g.Ds * g.Ds / 4) * 0.7, T: hotTube ? Th : Tcin, Rconv: 1 / (0.35 * x.ht * Amod),
+        Rwall: s.shellWall / 1000 / (kmat * Amod), fromLoop: hotTube, mSide: mHot, hot: hotTube ? 'Return coolant entering the tubes' : 'Facility water entering the tubes', wrongStream: !hotTube };
+      break;
+    }
+    case 'C3': {
+      const p = props(flH, Th), D = Math.sqrt(4 * (mHot / p.rho) / (Math.PI * 2)), tf = tubeFlow(p, 2, D, s.wrapLen);
+      loc = { avail: Math.PI * (D + 0.012) * s.wrapLen * 0.75, T: Th, Rconv: 1 / (tf.h * Amod), Rwall: (0.006 / 45 + 0.003 / 167) / Amod,
+        fromLoop: true, mSide: mHot, hot: 'Return coolant in the pipe', pipeD: D };
+      break;
+    }
+  }
+  const n = s.location === 'B' ? Math.round(s.stackMods) : Math.floor(loc.avail * s.coverage / 100 / Amod);
+  if (s.location === 'B') {
+    const nCh = Math.max(1, Math.ceil(n / 20)), p = props(flH, Th), gap = 0.003, Dh = 2 * side * gap / (side + gap);
+    const v = loc.mSide / nCh / (p.rho * side * gap), tf = tubeFlow(p, v, Dh, 20 * side);
+    loc.Rconv = 1 / (tf.h * Amod); loc.Rwall = 0.003 / (167 * Amod);
+    loc.dP = (tf.f * 20 * side / Dh + 1.5) * p.rho * v * v / 2; loc.vCh = v; loc.ReCh = tf.Re; loc.nCh = nCh;
+  }
+  const Rh = loc.Rconv + loc.Rwall + Rtim + Rsub, Rc = Rsub + Rtim + s.rSink;
+  let Tf = loc.T, mod;
+  for (let k = 0; k < (loc.fromLoop ? 6 : 1); k++) {
+    mod = tegModule(s, Tf, Tsink, Rh, Rc, degr);
+    if (loc.fromLoop && loc.mSide > 0) Tf = loc.T - n * mod.Qh / (2 * loc.mSide * flH.cp);
+  }
+  const series = Math.max(1, Math.round(s.series)), strings = Math.floor(n / series), wired = strings * series;
+  const Pdc = wired * mod.P;
+  const fan = s.sink === 'forced' ? n * s.fanW : 0;
+  const Pconv = n > 0 ? Math.max(0, Pdc * s.convEff / 100 - s.standby) : 0;
+  const parts = { conv: mod.Qh * loc.Rconv, wall: mod.Qh * loc.Rwall, hotIf: mod.Qh * (Rtim + Rsub), teg: mod.dTj, coldIf: mod.Qc * (Rtim + Rsub), sink: mod.Qc * s.rSink };
+  return { n, loc, Tf, Tsink, Rh, Rc, mod, series, strings, wired, Pdc, fan, Pconv, Pnet: Pconv - fan, parts, fromLoop: loc.fromLoop,
+    QhTotal: n * mod.Qh, packing: 2 * s.couples * Math.pow(s.legSide / 1000, 2) / Amod, Vstring: series * mod.V };
+}
+
+function solveSystem(s, pIT, Tcin, degr = 1, tegOn = true) {
+  const cool = COOLING[s.cooling], flH = FLUIDS[s.fluid], flC = FLUIDS.water;
+  const Qdc = pIT * 1000 * cool.capture;
+  const mHot = s.mHot / 1000 * flH.rho, mCold = s.mCold / 1000 * flC.rho;
+  const g = hxGeometry(s);
+  const useTeg = tegOn && (s.location === 'B' ? s.stackMods > 0 : s.coverage > 0);
+  const fBy = useTeg && s.location === 'B' ? s.bypassPct / 100 : 0;
+  const mHX = mHot * (1 - fBy);
+  const ev = Th => {
+    const hx = solveHX(s, g, Th, Tcin, mHX, mCold, flH, flC);
+    let teg = null, qt = 0;
+    if (useTeg) { teg = tegArray(s, g, hx, Th, Tcin, mHot, flH, degr, pIT); if (teg.fromLoop) qt = teg.QhTotal; }
+    return { hx, teg, Q: hx.Q + qt };
+  };
+  let a = Tcin + 0.01, b = Tcin + 150, ra = ev(a), rb = ev(b), fa = ra.Q - Qdc, fb = rb.Q - Qdc, r, Th, saturated = false;
+  if (fb < 0) { saturated = true; Th = b; r = rb; }
+  else if (fa >= 0) { Th = a; r = ra; }
+  else {
+    let side = 0;
+    for (let i = 0; i < 60; i++) {
+      Th = (a * fb - b * fa) / (fb - fa); r = ev(Th);
+      const f = r.Q - Qdc;
+      if (Math.abs(f) < Qdc * 2e-5 + 0.5 || b - a < 1e-4) break;
+      if (f * fb > 0) { b = Th; fb = f; if (side === -1) fa /= 2; side = -1; }
+      else { a = Th; fa = f; if (side === 1) fb /= 2; side = 1; }
+    }
+  }
+  const Tsup = Th - r.Q / (mHot * flH.cp);
+  const hotDP = s.hotSide === 'tube' ? r.hx.dPt : r.hx.dPs, coldDP = s.hotSide === 'tube' ? r.hx.dPs : r.hx.dPt;
+  const addedDP = r.teg && s.location === 'B' ? Math.max(0, r.teg.loc.dP - hotDP) : 0;
+  const V = mHot / flH.rho;
+  const pumpBase = s.circuitHead * 1000 * V / (s.pumpEff / 100);
+  const pumpAdd = addedDP * V / (s.pumpEff / 100);
+  const Pnet = r.teg ? r.teg.Pnet - pumpAdd : 0;
+  return { Qdc, Th, Tsup, hx: r.hx, teg: r.teg, Qloop: r.Q, saturated, mHot, mCold, g, fBy, Tcin, pIT, hotDP, coldDP, addedDP, pumpBase, pumpAdd, Pnet };
+}
+
+function loadAt(s, hod, dow) {
+  return s.pIT * s.util / 100 * (1 + s.swing / 100 * Math.sin(2 * Math.PI * (hod - 9) / 24)) * (dow >= 5 ? 1 - s.weekendDip / 100 : 1);
+}
+function coldAt(s, day) { return s.coldSource === 'tower' ? s.tcIn + s.tcSwing * Math.cos(2 * Math.PI * (day - 200) / 365) : s.tcIn; }
+function touPeriod(hod, dow) {
+  if (dow >= 5) return 'off';
+  if (hod >= 11 && hod < 17) return 'on';
+  if ((hod >= 7 && hod < 11) || (hod >= 17 && hod < 19)) return 'mid';
+  return 'off';
+}
+function priceAt(s, hod, dow) {
+  if (s.tariff === 'flat') return s.price;
+  const p = touPeriod(hod, dow); return p === 'on' ? s.pOn : p === 'mid' ? s.pMid : s.pOff;
+}
+
+function makeBattery(s) {
+  const ch = CHEMS[s.chem];
+  const cap = ch.flow ? s.tankL * ch.whL / 1000 : s.cellsS * s.cellsP * s.cellAh * ch.V / 1000;
+  return { cap, V: s.cellsS * ch.V, rt: s.rt / 100, busEff: s.busEff / 100, chargeKW: s.chargeC * cap, disKW: s.dischargeKW,
+    socMin: s.socMin / 100, socMax: Math.max(s.socMax, s.socMin + 1) / 100, reserve: s.reservePct / 100, selfd: s.selfd, mode: s.dispatch, flow: !!ch.flow };
+}
+// p in kW (may be negative when fans exceed output). Mutates st {soc, thru}. Returns bus-side flows in kW.
+function batteryStep(b, st, p, hod, dow, soh = 1) {
+  const cap = Math.max(1e-6, b.cap * soh), ec = Math.sqrt(b.rt), ed = Math.sqrt(b.rt) * b.busEff;
+  st.soc -= st.soc * b.selfd / 100 / 730;
+  const room = Math.max(0, b.socMax - st.soc) * cap, avail = Math.max(0, st.soc - b.socMin) * cap;
+  let charge = 0, dis = 0, direct = p;
+  const canCharge = lim => Math.max(0, Math.min(p, b.chargeKW, lim / ec));
+  const period = touPeriod(hod, dow);
+  if (p > 0) {
+    if (b.mode === 'store') charge = canCharge(room);
+    else if (b.mode === 'tou' && period !== 'on') charge = canCharge(room);
+    else if (b.mode === 'reserve') charge = canCharge(Math.max(0, b.reserve - st.soc) * cap);
+    direct = p - charge;
+  }
+  if (b.mode === 'store' || (b.mode === 'tou' && period === 'on')) dis = Math.min(b.disKW, avail * ed);
+  st.soc += (charge * ec - dis / ed) / cap;
+  st.soc = Math.min(1, Math.max(0, st.soc));
+  st.thru = (st.thru || 0) + dis / ed;
+  const toBus = direct > 0 ? direct * b.busEff + dis : direct + dis;
+  return { toBus, charge, dis, direct, clipped: p > 0 && charge >= b.chargeKW - 1e-9 && room > 1e-6 };
+}
+function sohOf(s, b, thru, years) {
+  const efc = thru / Math.max(b.cap * (s.socMax - s.socMin) / 100, 1e-6);
+  return Math.max(0.5, 1 - 0.2 * efc / s.cycleLife - 0.2 * years / s.calLife);
+}
+
+function project(s) {
+  const b = makeBattery(s), d = 1 - s.degr / 100;
+  const table = [];
+  let peakDC = 0;
+  for (let mo = 0; mo < 12; mo++) {
+    const day = Math.round(15 + 30.42 * mo), Tc = coldAt(s, day);
+    table[mo] = [[], []];
+    for (let wk = 0; wk < 2; wk++) for (let hb = 0; hb < 8; hb++) {
+      const hod = hb * 3 + 1.5, dow = wk ? 6 : 2;
+      const r = solveSystem(s, loadAt(s, hod, dow), Tc, 1, true);
+      const t = r.teg;
+      const row = t ? { Pdc: t.Pdc, fan: t.fan, pump: r.pumpAdd, n: t.n, it: r.pIT } : { Pdc: 0, fan: 0, pump: 0, n: 0, it: r.pIT };
+      table[mo][wk][hb] = row; peakDC = Math.max(peakDC, row.Pdc);
+    }
+  }
+  const netAt = (row, degr) => (row.n > 0 ? Math.max(0, row.Pdc * degr * s.convEff / 100 - s.standby) : 0) - row.fan - row.pump;
+  const t0 = solveSystem(s, s.pIT * s.util / 100, s.tcIn, 1, true);
+  const n = t0.teg ? t0.teg.n : 0;
+  const capex = n * (s.tegCost + s.installCost + s.sinkCost) + s.convCost * peakDC + s.batCost * b.cap + s.bos;
+  const years = []; let cum = -capex, thru = 0, age = 0, pvCost = capex, pvE = 0, npv = -capex, payback = null;
+  for (let y = 1; y <= s.horizon; y++) {
+    const degr = Math.pow(d, y - 0.5);
+    const soh = sohOf(s, b, thru, age);
+    let kWh = 0, value = 0, yThru = 0, genKWh = 0, itKWh = 0;
+    for (let mo = 0; mo < 12; mo++) for (let wk = 0; wk < 2; wk++) {
+      const days = 30.42 * (wk ? 2 / 7 : 5 / 7), dow = wk ? 6 : 2;
+      const st = { soc: b.socMin + 0.3 * (b.socMax - b.socMin), thru: 0 };
+      let e = 0, v = 0, th = 0, gen = 0, it = 0;
+      for (let pass = 0; pass < 3; pass++) {
+        e = 0; v = 0; st.thru = 0; gen = 0; it = 0;
+        for (let h = 0; h < 24; h++) {
+          const row = table[mo][wk][Math.floor(h / 3)];
+          const p = netAt(row, degr) / 1000;
+          const bs = batteryStep(b, st, p, h + 0.5, dow, soh);
+          e += bs.toBus; v += bs.toBus * priceAt(s, h + 0.5, dow); gen += p; it += row.it;
+        }
+        th = st.thru;
+      }
+      kWh += e * days; value += v * days; yThru += th * days; genKWh += gen * days; itKWh += it * days;
+    }
+    thru += yThru; age += 1;
+    let repl = 0;
+    if (sohOf(s, b, thru, age) < 0.7 && y < s.horizon) { repl = s.batCost * b.cap; thru = 0; age = 0; }
+    const cash = value - s.om - repl, df = Math.pow(1 + s.discount / 100, -y);
+    const prev = cum; cum += cash; npv += cash * df; pvCost += (s.om + repl) * df; pvE += kWh * df;
+    if (payback === null && cum >= 0 && cash > 0) payback = y - 1 + (-prev) / cash;
+    years.push({ y, kWh, value, cum, soh, repl, cycles: yThru / Math.max(b.cap * (s.socMax - s.socMin) / 100, 1e-6), genKWh, itKWh });
+  }
+  const y1 = years[0];
+  return { years, capex, npv, payback, lcoe: pvE > 0 ? pvCost / pvE : Infinity, peakDC, n, kWh1: y1.kWh, co2: y1.kWh * s.co2 / 1e6,
+    avgNetW: y1.genKWh / 8760 * 1000, avgItKW: y1.itKWh / 8760, battery: b, replacements: years.filter(x => x.repl > 0).length };
+}
+/* CORE:END */
+
+/* ---------------- state ---------------- */
+const DEFAULTS = {
+  cooling: 'd2c32', pIT: 1000, util: 75, swing: 12, weekendDip: 8, rackDens: 25, fluid: 'pg25', mHot: 22, itLimit: 40, coldAisle: 22, serverDT: 15, pue: 1.35, circuitHead: 250, pumpEff: 70,
+  hotSide: 'shell', hxMat: 'ss316', nShells: 1, arr0: 'tema_e', arr1: 'tema_e', arr2: 'tema_e', arr3: 'tema_e',
+  Nt: 180, passes: 2, od: 19.05, wall: 1.65, length: 4.5, pitchR: 1.25, layout: 'square', bafflePct: 60, shellWall: 8,
+  coldSource: 'tower', tcIn: 22, tcSwing: 6, mCold: 30, foulHot: 1.76, foulCold: 1.76, hOverride: false, hTube: 5000, hShell: 5000, maxDP: 70,
+  location: 'C1', coverage: 70, stackMods: 4000, bypassPct: 15, wrapLen: 8, hotFinR: 0.9,
+  sink: 'coldplate', rSink: 0.12, fanW: 0.1, ambient: 24,
+  teMat: 'bite_comm', Sp: 225, Sn: 185, rp: 12.5, rn: 10, kp: 1.35, kn: 1.5, degr: 1.0,
+  couples: 127, legSide: 1.4, legLen: 1.6, contact: 5, substrate: 'aln', tim: 'pcm', modSide: 40,
+  mppt: true, loadRatio: 1, series: 24, convEff: 94, standby: 3,
+  chem: 'lfp', cellsS: 16, cellsP: 2, cellAh: 100, tankL: 1000, chargeC: 0.5, dischargeKW: 0.3, socMin: 10, socMax: 95,
+  rt: 95, busEff: 96, cycleLife: 6000, calLife: 15, selfd: 2, dispatch: 'tou', reservePct: 60, criticalKW: 5,
+  tariff: 'tou', price: 0.13, pOn: 0.20, pMid: 0.15, pOff: 0.10, co2: 130,
+  tegCost: 12, installCost: 6, sinkCost: 5, convCost: 0.4, batCost: 350, bos: 5000, om: 300, discount: 6, horizon: 15
+};
+const SCENARIOS = {
+  base: {},
+  solA: { location: 'A', sink: 'natural', rSink: 1.6, coverage: 60 },
+  solB: { location: 'B', stackMods: 4000, bypassPct: 15, sink: 'coldplate', rSink: 0.12, coldSource: 'chilled', tcIn: 16 },
+  warm: { cooling: 'd2c45', itLimit: 50, rackDens: 60, fluid: 'pg25', mHot: 13, Nt: 120, length: 2.5, bafflePct: 70, coldSource: 'chilled', tcIn: 16, mCold: 26,
+    teMat: 'bite_t2', Sp: 205, Sn: 185, rp: 10, rn: 12.2, kp: 1.1, kn: 1.0, degr: 1.5, coverage: 90, sink: 'coldplate', rSink: 0.12, tim: 'indium' }
+};
+let S = { ...DEFAULTS };
+
+/* ---------------- helpers ---------------- */
+const $ = (q, el = document) => el.querySelector(q);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function fmt(v, d = 1) { if (v == null || !isFinite(v)) return '—'; return v.toLocaleString('en-CA', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function fmtW(W) { const a = Math.abs(W); if (!isFinite(W)) return '—';
+  if (a >= 1e6) return fmt(W / 1e6, 2) + ' MW'; if (a >= 1e3) return fmt(W / 1e3, a >= 1e4 ? 1 : 2) + ' kW'; return fmt(W, a >= 100 ? 0 : 1) + ' W'; }
+function fmtMoney(v) { if (!isFinite(v)) return '—'; const a = Math.abs(v), sg = v < 0 ? '−' : '';
+  if (a >= 1e6) return sg + '$' + fmt(a / 1e6, 2) + 'M'; if (a >= 1e4) return sg + '$' + fmt(a / 1e3, 1) + 'k'; return sg + '$' + fmt(a, 0); }
+function fmtKWh(v) { if (!isFinite(v)) return '—'; if (Math.abs(v) >= 1e6) return fmt(v / 1e6, 2) + ' GWh'; if (Math.abs(v) >= 1e4) return fmt(v / 1e3, 1) + ' MWh'; return fmt(v, Math.abs(v) < 10 ? 1 : 0) + ' kWh'; }
+const regLabel = r => r === 'lam' ? 'laminar' : r === 'tra' ? 'transitional' : 'turbulent';
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- controls schema ---------------- */
+const R_ = (k, label, unit, min, max, step, x = {}) => ({ t: 'range', k, label, unit, min, max, step, ...x });
+const SEL = (k, label, opts, x = {}) => ({ t: 'select', k, label, opts, ...x });
+const SEG = (k, label, opts, x = {}) => ({ t: 'seg', k, label, opts, ...x });
+const TOG = (k, label, x = {}) => ({ t: 'toggle', k, label, ...x });
+const H = label => ({ t: 'head', label });
+const INFO = fn => ({ t: 'info', fn });
+const ent = o => Object.entries(o).map(([v, x]) => [v, typeof x === 'string' ? x : x.name]);
+
+function onCooling() { const c = COOLING[S.cooling]; S.itLimit = c.itLimit; S.rackDens = c.rackDens; S.fluid = c.fluid; }
+function onTeMat() { const m = TEMATS[S.teMat]; if (S.teMat !== 'custom') { Object.assign(S, { Sp: m.Sp, Sn: m.Sn, rp: m.rp, rn: m.rn, kp: m.kp, kn: m.kn, degr: m.degr }); } }
+function onSink() { const k = SINKS[S.sink]; S.rSink = k.R; S.fanW = k.fan; }
+function onChem() { const c = CHEMS[S.chem]; Object.assign(S, { rt: c.rt, cycleLife: c.cycles, calLife: c.cal, chargeC: c.crate, batCost: c.cost, selfd: c.selfd }); }
+const isFlow = () => !!CHEMS[S.chem].flow;
+
+const SCHEMA = {
+  dc: [
+    H('Facility'),
+    SEL('cooling', 'Cooling solution', ent(COOLING), { on: onCooling, build: true, hint: 'Sets the share of IT heat that reaches the liquid loop, the coolant and the supply limit.' }),
+    R_('pIT', 'Rated IT load', 'kW', 50, 5000, 10, { build: true }),
+    R_('rackDens', 'Rack density', 'kW / rack', 5, 120, 1, { build: true }),
+    R_('util', 'Average utilisation', '%', 20, 100, 1),
+    R_('swing', 'Daily load swing', '± %', 0, 40, 1),
+    R_('weekendDip', 'Weekend load reduction', '%', 0, 30, 1),
+    H('Liquid loop'),
+    SEL('fluid', 'Coolant', ent(FLUIDS)),
+    R_('mHot', 'Coolant flow rate', 'L/s', 1, 120, 0.5),
+    R_('itLimit', 'Maximum coolant supply to IT', '°C', 12, 60, 0.5),
+    R_('circuitHead', 'Existing loop pump head', 'kPa', 50, 600, 5),
+    R_('pumpEff', 'Pump efficiency', '%', 40, 90, 1),
+    H('Air side'),
+    R_('coldAisle', 'Cold-aisle air temperature', '°C', 16, 30, 0.5),
+    R_('serverDT', 'Air temperature rise across servers', 'K', 6, 25, 0.5),
+    R_('pue', 'Facility PUE before TEGs', '', 1.05, 2.2, 0.01),
+    INFO(dcInfo)
+  ],
+  hx: [
+    H('Arrangement'),
+    SEG('hotSide', 'Return coolant flows in the', [['tube', 'Tubes'], ['shell', 'Shell']], { build: true, hint: 'Shell-exterior TEGs only see hot fluid when the coolant is on the shell side.' }),
+    SEL('hxMat', 'Construction material', ent(MATERIALS), { build: true }),
+    R_('nShells', 'Shells in series', '', 1, 4, 1, { build: true }),
+    ...[0, 1, 2, 3].map(i => SEL('arr' + i, `Shell ${i + 1} flow arrangement`, ent(ARRS), { show: s => i < s.nShells })),
+    H('Tube bundle'),
+    R_('Nt', 'Tubes per shell', '', 10, 1500, 1, { build: true }),
+    SEL('passes', 'Tube passes per shell', [[1, '1'], [2, '2'], [4, '4'], [6, '6'], [8, '8']], { num: true, build: true }),
+    R_('od', 'Tube outside diameter', 'mm', 9.5, 50.8, 0.05, { build: true }),
+    R_('wall', 'Tube wall thickness', 'mm', 0.5, 4, 0.05),
+    R_('length', 'Tube length', 'm', 1, 8, 0.1, { build: true }),
+    SEG('layout', 'Tube layout', [['square', 'Square pitch'], ['tri', 'Triangular pitch']], { build: true }),
+    R_('pitchR', 'Pitch / tube diameter', '', 1.2, 1.6, 0.01, { build: true }),
+    H('Shell'),
+    R_('bafflePct', 'Baffle spacing', '% of shell ID', 20, 100, 1, { build: true }),
+    R_('shellWall', 'Shell wall thickness', 'mm', 3, 25, 0.5),
+    H('Facility water (cold side)'),
+    SEG('coldSource', 'Source', [['tower', 'Cooling tower'], ['chilled', 'Chiller']], { build: true, hint: 'Tower water follows the seasons; chiller water stays fixed.' }),
+    R_('tcIn', 'Supply temperature (annual mean)', '°C', 4, 35, 0.5),
+    R_('tcSwing', 'Seasonal swing', '± K', 0, 12, 0.5, { show: s => s.coldSource === 'tower' }),
+    R_('mCold', 'Facility water flow rate', 'L/s', 1, 150, 0.5),
+    H('Heat transfer'),
+    R_('foulHot', 'Fouling resistance, coolant side', '×10⁻⁴ m²K/W', 0, 8, 0.02),
+    R_('foulCold', 'Fouling resistance, facility side', '×10⁻⁴ m²K/W', 0, 8, 0.02),
+    TOG('hOverride', 'Set film coefficients by hand'),
+    R_('hTube', 'Tube-side film coefficient', 'W/m²K', 100, 20000, 50, { show: s => s.hOverride }),
+    R_('hShell', 'Shell-side film coefficient', 'W/m²K', 100, 20000, 50, { show: s => s.hOverride }),
+    R_('maxDP', 'Allowable pressure drop per side', 'kPa', 10, 200, 1),
+    INFO(hxInfo)
+  ],
+  teg: [
+    H('Placement'),
+    SEL('location', 'TEG location', ent(LOCS), { build: true }),
+    R_('coverage', 'Coverage of available surface', '%', 1, 100, 1, { build: true, show: s => s.location !== 'B' }),
+    R_('stackMods', 'Modules in bypass stack', '', 20, 20000, 20, { build: true, show: s => s.location === 'B' }),
+    R_('bypassPct', 'Coolant diverted through the stack', '%', 1, 60, 0.5, { show: s => s.location === 'B' }),
+    R_('wrapLen', 'Length of pipe wrapped', 'm', 1, 40, 0.5, { build: true, show: s => s.location === 'C3' }),
+    R_('hotFinR', 'Hot-side air fin resistance', 'K/W', 0.1, 4, 0.05, { show: s => s.location === 'A' }),
+    H('Cold side'),
+    SEL('sink', 'Heat sink', ent(SINKS), { on: onSink, build: true }),
+    R_('rSink', 'Sink resistance per module', 'K/W', 0.03, 4, 0.01),
+    R_('fanW', 'Fan power per module', 'W', 0, 0.6, 0.01, { show: s => s.sink === 'forced' }),
+    R_('ambient', 'Mechanical-room air temperature', '°C', 5, 40, 0.5, { show: s => s.sink !== 'coldplate' && s.location !== 'A' }),
+    H('Thermoelectric material'),
+    SEL('teMat', 'Material', ent(TEMATS), { on: onTeMat }),
+    R_('Sp', 'p-leg Seebeck coefficient', 'µV/K', 50, 320, 1, { custom: true }),
+    R_('Sn', 'n-leg Seebeck coefficient (magnitude)', 'µV/K', 50, 320, 1, { custom: true }),
+    R_('rp', 'p-leg electrical resistivity', 'µΩ·m', 4, 40, 0.1, { custom: true }),
+    R_('rn', 'n-leg electrical resistivity', 'µΩ·m', 4, 40, 0.1, { custom: true }),
+    R_('kp', 'p-leg thermal conductivity', 'W/m·K', 0.4, 6, 0.01, { custom: true }),
+    R_('kn', 'n-leg thermal conductivity', 'W/m·K', 0.4, 6, 0.01, { custom: true }),
+    R_('degr', 'Output decay over time', '% / yr', 0, 6, 0.1),
+    H('Module build'),
+    R_('couples', 'Couples per module', '', 17, 254, 1),
+    R_('legSide', 'Leg cross-section side', 'mm', 0.5, 3, 0.05),
+    R_('legLen', 'Leg length', 'mm', 0.4, 4, 0.05),
+    R_('contact', 'Electrical contact resistivity', 'µΩ·cm²', 0, 50, 0.5),
+    SEL('substrate', 'Substrate', ent(SUBSTRATES)),
+    SEL('tim', 'Thermal interface material', ent(TIMS)),
+    R_('modSide', 'Module footprint side', 'mm', 15, 62, 1, { build: true }),
+    H('Electrical'),
+    TOG('mppt', 'Maximum-power-point tracking'),
+    R_('loadRatio', 'Load / internal resistance', '', 0.2, 3, 0.05, { show: s => !s.mppt }),
+    R_('series', 'Modules per series string', '', 1, 120, 1),
+    R_('convEff', 'DC-DC converter efficiency', '%', 70, 99, 0.5),
+    R_('standby', 'Converter standby loss', 'W', 0, 50, 0.5),
+    INFO(tegInfo)
+  ],
+  bat: [
+    H('Chemistry'),
+    SEL('chem', 'Battery type', ent(CHEMS), { on: onChem, build: true }),
+    H('Pack build'),
+    R_('cellsS', 'Cells in series', '', 1, 400, 1),
+    R_('cellsP', 'Parallel strings', '', 1, 50, 1, { show: () => !isFlow() }),
+    R_('cellAh', 'Cell capacity', 'Ah', 2, 320, 1, { show: () => !isFlow() }),
+    R_('tankL', 'Electrolyte volume (refuel capacity)', 'L', 50, 30000, 50, { show: () => isFlow(), hint: 'Flow-battery energy scales with electrolyte, independent of stack power.' }),
+    R_('chargeC', 'Recharge rate', 'C', 0.05, 4, 0.05, { hint: 'Maximum charging power as a multiple of capacity. Output above this passes straight to the bus.' }),
+    R_('dischargeKW', 'Discharge power to the IT bus', 'kW', 0.01, 100, 0.01),
+    R_('socMin', 'Minimum state of charge', '%', 0, 50, 1),
+    R_('socMax', 'Maximum state of charge', '%', 50, 100, 1),
+    H('Performance and life'),
+    R_('rt', 'Round-trip efficiency', '%', 50, 99, 0.5),
+    R_('busEff', 'Bus converter efficiency', '%', 80, 99.5, 0.5),
+    R_('cycleLife', 'Cycle life to 80 % capacity', 'cycles', 200, 30000, 100),
+    R_('calLife', 'Calendar life to 80 % capacity', 'yr', 2, 30, 0.5),
+    R_('selfd', 'Self-discharge', '% / month', 0, 10, 0.1),
+    H('Dispatch back to the data centre'),
+    SEL('dispatch', 'Dispatch strategy', ent(DISPATCH)),
+    R_('reservePct', 'Backup reserve', '% SOC', 10, 100, 1, { show: s => s.dispatch === 'reserve' }),
+    R_('criticalKW', 'Critical load for ride-through', 'kW', 0.1, 500, 0.1),
+    INFO(batInfo)
+  ],
+  econ: [
+    H('Electricity value'),
+    SEG('tariff', 'Tariff', [['flat', 'Flat rate'], ['tou', 'Time-of-use']]),
+    R_('price', 'Flat price', '$/kWh', 0.03, 0.4, 0.005, { show: s => s.tariff === 'flat' }),
+    R_('pOn', 'On-peak · weekdays 11:00–17:00', '$/kWh', 0.03, 0.5, 0.005, { show: s => s.tariff === 'tou' }),
+    R_('pMid', 'Mid-peak · 7–11 and 17–19', '$/kWh', 0.03, 0.5, 0.005, { show: s => s.tariff === 'tou' }),
+    R_('pOff', 'Off-peak · nights and weekends', '$/kWh', 0.02, 0.5, 0.005, { show: s => s.tariff === 'tou' }),
+    R_('co2', 'Grid emissions factor', 'g CO₂e/kWh', 0, 800, 1),
+    H('Capital cost'),
+    R_('tegCost', 'TEG module', '$ / module', 1, 80, 0.5),
+    R_('installCost', 'Mounting and labour', '$ / module', 0, 40, 0.5),
+    R_('sinkCost', 'Heat sink or cold plate', '$ / module', 0, 60, 0.5),
+    R_('convCost', 'Power electronics', '$ / W', 0.05, 3, 0.05),
+    R_('batCost', 'Battery', '$ / kWh', 50, 1500, 10),
+    R_('bos', 'Wiring, protection and inspection', '$', 0, 100000, 500),
+    H('Operation'),
+    R_('om', 'Maintenance', '$ / yr', 0, 20000, 50),
+    R_('discount', 'Discount rate', '%', 0, 15, 0.25),
+    R_('horizon', 'Analysis horizon', 'yr', 5, 25, 1, { build: false }),
+    INFO(econInfo)
+  ]
+};
+
+/* ---------------- simulation state ---------------- */
+const sim = { t: 0, playing: !reduceMotion, speed: 6, acc: 0, bat: { soc: 0.3, thru: 0 }, hist: [], last: null, batt: null };
+let design = null, proj = null, now = null;
+
+function hourCtx(t) { const day = Math.floor(t / 24), hod = t % 24, dow = day % 7; return { day, hod, dow }; }
+function stepHour(record = true) {
+  const { day, hod, dow } = hourCtx(sim.t);
+  const pIT = loadAt(S, hod, dow), Tc = coldAt(S, day), degr = Math.pow(1 - S.degr / 100, sim.t / 8760);
+  const r = solveSystem(S, pIT, Tc, degr, true);
+  const soh = sohOf(S, sim.batt, sim.bat.thru, sim.t / 8760);
+  const bs = batteryStep(sim.batt, sim.bat, r.Pnet / 1000, hod + 0.5, dow, soh);
+  if (record) { sim.hist.push({ t: sim.t, p: r.Pnet, soc: sim.bat.soc * 100, th: r.Th, ts: r.Tsup }); if (sim.hist.length > 168) sim.hist.shift(); }
+  sim.last = { r, bs, soh, hod, dow, day };
+  sim.t++;
+}
+function resimulate() {
+  sim.batt = makeBattery(S);
+  const end = Math.max(sim.t, 168);
+  sim.t = end - 168; sim.hist = [];
+  sim.bat = { soc: sim.batt.socMin + 0.3 * (sim.batt.socMax - sim.batt.socMin), thru: sim.bat.thru || 0 };
+  for (let i = 0; i < 168; i++) stepHour(true);
+}
+function evalDesign() {
+  const pPeak = S.pIT * S.util / 100 * (1 + S.swing / 100);
+  const Tc = S.tcIn + (S.coldSource === 'tower' ? S.tcSwing : 0);
+  const r = solveSystem(S, pPeak, Tc, 1, true), b = solveSystem(S, pPeak, Tc, 1, false);
+  design = { r, b, dTattr: r.Tsup - b.Tsup, pPeak, Tc };
+}
+
+/* ---------------- control rendering ---------------- */
+let activeTab = 'dc';
+function renderControls() {
+  const host = $('#controls'); host.innerHTML = '';
+  for (const c of SCHEMA[activeTab]) {
+    if (c.show && !c.show(S)) continue;
+    if (c.t === 'head') { const h = document.createElement('div'); h.className = 'gh'; h.textContent = c.label; host.appendChild(h); continue; }
+    if (c.t === 'info') { const d = document.createElement('dl'); d.className = 'info'; d.dataset.info = '1'; d._fn = c.fn; host.appendChild(d); continue; }
+    const w = document.createElement('div'); w.className = 'ctl'; w.dataset.k = c.k;
+    const id = 'c-' + c.k;
+    if (c.t === 'range') {
+      w.innerHTML = `<label for="${id}">${c.label}${c.unit ? `<span class="u">${c.unit}</span>` : ''}</label>
+        <input type="number" id="n-${c.k}" aria-label="${c.label} value" min="${c.min}" max="${c.max}" step="${c.step}">
+        <input type="range" id="${id}" min="${c.min}" max="${c.max}" step="${c.step}">`;
+      const rng = $('input[type=range]', w), num = $('input[type=number]', w);
+      rng.value = S[c.k]; num.value = S[c.k];
+      rng.addEventListener('input', () => { num.value = rng.value; setVal(c, +rng.value, false); });
+      num.addEventListener('change', () => { const v = clamp(+num.value, c.min, c.max); num.value = v; rng.value = v; setVal(c, v, false); });
+    } else if (c.t === 'select') {
+      w.innerHTML = `<label for="${id}">${c.label}</label><select id="${id}">${c.opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>`;
+      const sel = $('select', w); sel.value = String(S[c.k]);
+      sel.addEventListener('change', () => setVal(c, c.num ? +sel.value : sel.value, true));
+    } else if (c.t === 'seg') {
+      w.innerHTML = `<label>${c.label}</label><div class="seg" role="group" aria-label="${c.label}">${c.opts.map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${S[c.k] === v}">${l}</button>`).join('')}</div>`;
+      w.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => setVal(c, b.dataset.v, true)));
+    } else if (c.t === 'toggle') {
+      w.innerHTML = `<label class="tog" for="${id}"><input type="checkbox" id="${id}" ${S[c.k] ? 'checked' : ''}>${c.label}</label>`;
+      $('input', w).addEventListener('change', e => setVal(c, e.target.checked, true));
+    }
+    if (c.hint) { const h = document.createElement('div'); h.className = 'hint'; h.textContent = c.hint; w.appendChild(h); }
+    host.appendChild(w);
+  }
+  renderInfo();
+}
+function renderInfo() { document.querySelectorAll('#controls dl.info').forEach(d => { d.innerHTML = d._fn(); }); }
+function syncControls() {
+  for (const c of SCHEMA[activeTab]) {
+    if (c.t !== 'range') continue;
+    const r = document.getElementById('c-' + c.k), n = document.getElementById('n-' + c.k);
+    if (r && document.activeElement !== r) r.value = S[c.k];
+    if (n && document.activeElement !== n) n.value = S[c.k];
+  }
+}
+function setVal(c, v, rerender) {
+  S[c.k] = v;
+  if (c.custom && S.teMat !== 'custom') { S.teMat = 'custom'; rerender = true; }
+  if (c.on) { c.on(); rerender = true; }
+  if (rerender) renderControls(); else syncControls();
+  $('#scenario').value = '';
+  changed(!!c.build);
+}
+function setTab(t) {
+  activeTab = t;
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+  renderControls();
+  highlightTag(t);
+}
+
+/* info blocks */
+const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+function dcInfo() {
+  const c = COOLING[S.cooling], racks = Math.max(1, Math.round(S.pIT / S.rackDens));
+  const fl = FLUIDS[S.fluid], avgIT = S.pIT * S.util / 100, Q = avgIT * c.capture;
+  const dT = Q * 1000 / (S.mHot / 1000 * fl.rho * fl.cp);
+  return row('Racks', fmt(racks, 0)) + row('Heat into liquid loop (avg)', fmtW(Q * 1000)) + row('Coolant rise across IT (avg)', fmt(dT, 1) + ' K') +
+    row('Facility water class limit', c.facLimit ? c.facLimit + ' °C' : 'n/a (chilled water)');
+}
+function hxInfo() {
+  const g = hxGeometry(S), r = sim.last && sim.last.r, sh = r ? r.hx.shells[0] : null;
+  return row('Shell inside diameter', fmt(g.Ds * 1000, 0) + ' mm') + row('Bundle diameter', fmt(g.Db * 1000, 0) + ' mm') + row('Baffles per shell', fmt(g.nBaff, 0)) +
+    row('Heat-transfer area', fmt(g.Ao * S.nShells, 1) + ' m²') + (sh ? row('Tube velocity', fmt(sh.vt, 2) + ' m/s') + row('Shell velocity', fmt(sh.us, 2) + ' m/s') : '');
+}
+function tegInfo() {
+  const r = sim.last && sim.last.r, t = r && r.teg; if (!t) return '<div class="full">No modules installed.</div>';
+  return row('Modules installed', fmt(t.n, 0)) + row('Wired in strings', `${fmt(t.strings, 0)} × ${t.series}`) + row('Device ZT', fmt(t.mod.ZT, 2)) +
+    row('Module internal resistance', fmt(t.mod.R, 2) + ' Ω') + row('Module thermal conductance', fmt(t.mod.K, 3) + ' W/K') + row('Leg packing in footprint', fmt(t.packing * 100, 0) + ' %');
+}
+function batInfo() {
+  const b = makeBattery(S), usable = b.cap * (b.socMax - b.socMin);
+  return row('Pack voltage (nominal)', fmt(b.V, 1) + ' V') + row('Capacity', fmt(b.cap, 1) + ' kWh') + row('Usable window', fmt(usable, 1) + ' kWh') +
+    row('Maximum charging power', fmtW(b.chargeKW * 1000)) + row('Ride-through at critical load', fmt(usable / S.criticalKW * 60, 0) + ' min');
+}
+function econInfo() {
+  if (!proj) return '';
+  return row('Capital cost', fmtMoney(proj.capex)) + row('Simple payback', proj.payback != null ? fmt(proj.payback, 1) + ' yr' : 'not within horizon') +
+    row('Net present value', fmtMoney(proj.npv)) + row('Levelised cost of TEG energy', isFinite(proj.lcoe) ? '$' + fmt(proj.lcoe, 2) + ' / kWh' : '—');
+}
+
+/* ---------------- change pipeline ---------------- */
+let buildTimer = null, heavyTimer = null;
+function changed(structural) {
+  sim.batt = makeBattery(S);
+  stepHourPreview();
+  if (structural) { clearTimeout(buildTimer); buildTimer = setTimeout(buildScene, 90); }
+  clearTimeout(heavyTimer);
+  heavyTimer = setTimeout(() => { resimulate(); evalDesign(); proj = project(S); renderDeck(); renderInfo(); drawAllCharts(); }, 260);
+}
+function stepHourPreview() {
+  // recompute this hour only, without advancing the clock
+  const t = Math.max(0, sim.t - 1), { day, hod, dow } = hourCtx(t);
+  const r = solveSystem(S, loadAt(S, hod, dow), coldAt(S, day), Math.pow(1 - S.degr / 100, t / 8760), true);
+  sim.last = { ...(sim.last || {}), r, hod, dow, day, bs: sim.last ? sim.last.bs : { toBus: 0 } };
+  renderInfo(); renderLive();
+}
+function applyScenario(key) {
+  S = { ...DEFAULTS, ...SCENARIOS[key] };
+  renderControls(); changed(true); buildScene();
+}
+
+/* ---------------- deck rendering ---------------- */
+function kpi(k, v, sub, cls = '') { return `<div class="kpi ${cls}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`; }
+function renderLive() {
+  const L = sim.last; if (!L) return;
+  const r = L.r, t = r.teg, b = sim.batt || makeBattery(S);
+  const qTeg = t ? Math.abs(t.QhTotal) : 0;
+  const pr = proj;
+  const perRack = pr ? pr.avgNetW / Math.max(pr.avgItKW / 25, 1e-6) : NaN;
+  $('#kpis').innerHTML =
+    kpi('TEG net output', fmtW(r.Pnet), t ? `${fmt(t.n, 0)} modules · ${fmt(t.mod.eta * 100, 2)} % conversion` : 'No modules', 'power') +
+    kpi('Heat through TEGs', fmtW(qTeg), t ? `${fmt(t.mod.dTj, 1)} K at junctions of ${fmt(t.Tf - t.Tsink, 1)} K available` : '—') +
+    kpi('Coolant to IT', fmt(r.Tsup, 1) + ' °C', `Return ${fmt(r.Th, 1)} °C · limit ${fmt(S.itLimit, 1)} °C`) +
+    kpi('Heat exchanger duty', fmtW(r.hx.Q), `Facility water in ${fmt(r.Tcin, 1)} °C, out ${fmt(r.hx.TcOut, 1)} °C`) +
+    kpi('Battery', fmt(sim.bat.soc * 100, 0) + ' %', `${fmt(sim.bat.soc * b.cap * (L.soh || 1), 2)} of ${fmt(b.cap, 1)} kWh · ${S.dispatch === 'tou' ? touPeriod(L.hod, L.dow) + '-peak now' : 'SOH ' + fmt((L.soh || 1) * 100, 0) + ' %'}`) +
+    kpi('Delivered, year 1', pr ? fmtKWh(pr.kWh1) : '—', pr ? `${fmt(pr.co2, 2)} t CO₂e avoided` : '') +
+    kpi('Payback', pr ? (pr.payback != null ? fmt(pr.payback, 1) + ' yr' : '> ' + S.horizon + ' yr') : '—', pr ? `Capital ${fmtMoney(pr.capex)}` : '') +
+    kpi('Per 25 kW rack', isFinite(perRack) ? fmt(perRack, 1) + ' W' : '—', pr ? `PUE ${fmt(S.pue, 3)} → ${fmt(S.pue - pr.avgNetW / 1000 / Math.max(pr.avgItKW, 1e-6), 4)}` : '');
+  renderChain(); renderRbar(); renderShellTable(); renderDetails(); updateClock();
+}
+function renderChain() {
+  const L = sim.last, r = L.r, t = r.teg;
+  const stages = [
+    ['IT load', r.pIT * 1000, null],
+    ['Heat into liquid loop', r.Qdc, 'capture'],
+    ['Heat through TEG modules', t ? Math.abs(t.QhTotal) : 0, 'of loop heat'],
+    ['TEG electrical output (DC)', t ? t.Pdc : 0, 'efficiency', true],
+    ['After DC-DC converter', t ? t.Pconv : 0, 'converter', true],
+    ['Net of fans and pumping', r.Pnet, 'parasitics', true],
+    ['Delivered to IT bus this hour', (L.bs ? L.bs.toBus : 0) * 1000, 'after battery', true]
+  ];
+  if (S.location === 'A') stages[2][2] = 'vs loop heat';
+  const maxL = Math.log10(Math.max(10, stages[0][1]));
+  $('#chain').innerHTML = stages.map((s, i) => {
+    const v = s[1], prev = i ? stages[i - 1][1] : null;
+    const pct = prev ? (prev !== 0 ? v / prev * 100 : 0) : null;
+    const w = v > 1 ? clamp(Math.log10(v) / maxL * 100, 1, 100) : 0;
+    return `<div class="row ${s[3] ? 'el' : ''}"><span>${s[0]}</span><span class="v">${fmtW(v)}</span><span class="bar"><i style="width:${w}%"></i></span><span class="p">${pct == null ? '' : fmt(pct, pct < 1 ? 2 : 1) + '%'}</span></div>`;
+  }).join('');
+}
+const RCOLS = { conv: '#5c7a99', wall: '#7b8794', hotIf: '#9aa6b2', teg: 'var(--amber)', coldIf: '#9aa6b2', sink: '#4f86b8' };
+function renderRbar() {
+  const t = sim.last.r.teg;
+  if (!t) { $('#rbar').innerHTML = ''; $('#rkey').innerHTML = ''; $('#rnote').textContent = 'No modules installed.'; return; }
+  const p = t.parts, names = { conv: 'Fluid film', wall: 'Wall', hotIf: 'Interface + substrate (hot)', teg: 'TEG legs (useful)', coldIf: 'Interface + substrate (cold)', sink: 'Heat sink' };
+  const keys = Object.keys(p).filter(k => Math.abs(p[k]) > 1e-6);
+  const tot = keys.reduce((a, k) => a + Math.abs(p[k]), 0) || 1;
+  $('#rbar').innerHTML = keys.map(k => { const f = Math.abs(p[k]) / tot; return `<div style="flex:${f};background:${RCOLS[k]}" title="${names[k]}: ${fmt(p[k], 2)} K">${f > 0.09 ? fmt(p[k], 1) + ' K' : ''}</div>`; }).join('');
+  $('#rkey').innerHTML = keys.map(k => `<span><i style="background:${RCOLS[k]}"></i>${names[k]} ${fmt(p[k], 2)} K</span>`).join('');
+  const lossK = keys.filter(k => k !== 'teg').sort((a, b) => Math.abs(p[b]) - Math.abs(p[a]))[0];
+  let note = `${fmt(Math.abs(p.teg) / tot * 100, 0)} % of the ${fmt(tot, 1)} K between ${t.loc.hot.toLowerCase()} and the sink reaches the junctions. Largest loss: ${names[lossK].toLowerCase()}.`;
+  if (t.loc.wrongStream) note += ' This surface carries facility water, not the hot return. Switch the coolant to the other side in the heat-exchanger tab.';
+  $('#rnote').textContent = note;
+}
+function renderShellTable() {
+  const r = sim.last.r, hotTube = S.hotSide === 'tube';
+  const rg = (Re) => { const k = regime(Re); return `<span class="rg ${k === 'tur' ? '' : k}">${regLabel(k)}</span>`; };
+  let h = `<thead><tr><th>Shell</th><th>Arrangement</th><th>Tube Re</th><th>Shell Re</th><th>h tube<br>W/m²K</th><th>h shell<br>W/m²K</th><th>U<br>W/m²K</th><th>NTU</th><th>ε</th><th>Duty</th><th>Coolant °C</th><th>Facility °C</th></tr></thead><tbody>`;
+  r.hx.shells.forEach((x, i) => {
+    h += `<tr><td>${i + 1}</td><td style="font-family:var(--f-body)">${ARRS[x.arr].split(' ·')[0]}</td><td>${fmt(x.Ret, 0)}${rg(x.Ret)}</td><td>${fmt(x.Res, 0)}${rg(x.Res)}</td>
+      <td>${fmt(x.ht, 0)}</td><td>${fmt(x.hs, 0)}</td><td>${fmt(x.U, 0)}</td><td>${fmt(x.NTU, 2)}</td><td>${fmt(x.eps, 3)}</td><td>${fmtW(x.Q)}</td>
+      <td>${fmt(x.hIn, 1)} → ${fmt(x.hOut, 1)}</td><td>${fmt(x.cIn, 1)} → ${fmt(x.cOut, 1)}</td></tr>`;
+  });
+  h += `</tbody><tfoot><tr><td colspan="2" style="font-family:var(--f-body)">Pressure drop</td><td colspan="10">tube side ${fmt(r.hx.dPt / 1000, 1)} kPa · shell side ${fmt(r.hx.dPs / 1000, 1)} kPa · coolant is on the ${hotTube ? 'tube' : 'shell'} side</td></tr></tfoot>`;
+  $('#shellTable').innerHTML = h;
+  $('#hxWarn').innerHTML = r.saturated ? '<p class="warnline">The exchanger cannot reject this heat load below 150 °C. Add area, shells or flow.</p>' : '';
+}
+function renderDetails() {
+  const L = sim.last, r = L.r, t = r.teg, b = sim.batt || makeBattery(S), D = design;
+  const dd = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+  let h = '';
+  if (t) {
+    h += dd('Hot source', t.loc.hot) + dd('Hot fluid at modules', fmt(t.Tf, 1) + ' °C') + dd('Sink temperature', fmt(t.Tsink, 1) + ' °C') +
+      dd('Junctions hot / cold', `${fmt(t.mod.Thj, 1)} / ${fmt(t.mod.Tcj, 1)} °C`) + dd('Power per module', fmt(t.mod.P * 1000, 1) + ' mW') +
+      dd('Module efficiency / Carnot', `${fmt(t.mod.eta * 100, 2)} % / ${fmt(t.mod.carnot * 100, 1)} %`) +
+      dd('String voltage at load', fmt(t.Vstring, 2) + ' V') + dd('String current', fmt(t.mod.I, 3) + ' A') +
+      dd('Unwired modules', fmt(t.n - t.wired, 0)) + (t.fan ? dd('Fan power', fmtW(t.fan)) : '') +
+      (S.location === 'B' ? dd('Stack channel velocity', fmt(t.loc.vCh, 2) + ' m/s') + dd('Stack pressure drop', fmt(t.loc.dP / 1000, 1) + ' kPa') : '') +
+      (S.location === 'C3' ? dd('Return pipe diameter', fmt(t.loc.pipeD * 1000, 0) + ' mm') : '') +
+      (D && D.r.teg ? dd('Peak DC output (design case)', fmtW(D.r.teg.Pdc)) : '');
+  }
+  const usable = b.cap * (b.socMax - b.socMin);
+  h += dd('Battery pack', `${fmt(b.V, 0)} V · ${fmt(b.cap, 1)} kWh`) + dd('State of health', fmt((L.soh || 1) * 100, 1) + ' %') +
+    dd('Time to fill from empty', r.Pnet > 0 ? fmt(usable / Math.min(r.Pnet / 1000, b.chargeKW), 1) + ' h' : '—') +
+    dd('Charge limit hit this hour', L.bs && L.bs.clipped ? 'yes' : 'no') +
+    dd('Battery replacements in horizon', proj ? fmt(proj.replacements, 0) : '—');
+  $('#details').innerHTML = h;
+}
+function renderChecks() {
+  const D = design, r = D.r, t = r.teg, c = COOLING[S.cooling], pr = proj;
+  const out = [];
+  const add = (st, name, sub, val) => out.push({ st, name, sub, val });
+  add(r.Tsup <= S.itLimit ? 'pass' : 'fail', 'Coolant supply to IT within limit', 'ASHRAE TC 9.9 envelope for the chosen cooling', `${fmt(r.Tsup, 1)} ≤ ${fmt(S.itLimit, 1)} °C`);
+  if (c.airApproach) { const air = r.Tsup + c.airApproach; add(air <= 27 ? 'pass' : 'fail', 'IT inlet air ≤ 27 °C', 'Class A1/A2 recommended envelope', `${fmt(air, 1)} °C`); }
+  if (c.facLimit) add(D.Tc <= c.facLimit ? 'pass' : 'fail', 'Facility water within class', `W${c.facLimit} supply limit`, `${fmt(D.Tc, 1)} ≤ ${c.facLimit} °C`);
+  add(D.dTattr <= 1 ? 'pass' : 'fail', 'Coolant change caused by TEGs ≤ 1 °C', D.dTattr < 0 ? 'TEGs remove extra heat, so the supply runs cooler' : 'Supply temperature rise versus no TEGs', `${D.dTattr >= 0 ? '+' : '−'}${fmt(Math.abs(D.dTattr), 2)} K`);
+  add(!r.saturated ? 'pass' : 'fail', 'Exchanger rejects the full heat load', '', fmtW(r.Qloop));
+  add(r.hotDP / 1000 <= S.maxDP && r.coldDP / 1000 <= S.maxDP ? 'pass' : 'warn', 'Exchanger pressure drop within allowance', 'Kern / Petukhov estimate, each side', `${fmt(r.hotDP / 1000, 0)} / ${fmt(r.coldDP / 1000, 0)} kPa`);
+  add(r.addedDP <= 0.05 * S.circuitHead * 1000 ? 'pass' : 'fail', 'Added pressure drop ≤ 5 % of circuit head', S.location === 'B' ? 'Bypass stack against the exchanger' : 'Surface-bonded modules add none', `${fmt(r.addedDP / 1000, 1)} kPa`);
+  add(r.pumpAdd <= 0.02 * r.pumpBase ? 'pass' : 'fail', 'Pump power increase < 2 %', '', `${fmt(r.pumpAdd / Math.max(r.pumpBase, 1e-9) * 100, 2)} %`);
+  const sh = r.hx.shells[0], hotTube = S.hotSide === 'tube';
+  add(sh.vt >= 0.9 && sh.vt <= 2.5 ? 'pass' : 'warn', 'Tube velocity 0.9–2.5 m/s', 'Below: fouling. Above: erosion.', `${fmt(sh.vt, 2)} m/s`);
+  add(sh.us >= 0.3 && sh.us <= 1.5 ? 'pass' : 'warn', 'Shell velocity 0.3–1.5 m/s', '', `${fmt(sh.us, 2)} m/s`);
+  if (t) {
+    const maxT = (TEMATS[S.teMat] || TEMATS.custom).maxT;
+    add(t.mod.Thj <= maxT ? 'pass' : 'fail', 'Hot junction below material limit', '', `${fmt(t.mod.Thj, 0)} ≤ ${maxT} °C`);
+    add(t.packing <= 0.7 ? 'pass' : 'fail', 'Legs fit the module footprint', 'Fill factor ≤ 70 %', `${fmt(t.packing * 100, 0)} %`);
+    if (S.location !== 'B') add(S.coverage <= 85 ? 'pass' : 'warn', 'Access left for 4-hour module swaps', 'Coverage ≤ 85 % keeps service lanes', `${fmt(S.coverage, 0)} %`);
+    if (t.loc.wrongStream) add('fail', 'TEGs sit on the hot stream', 'This surface carries facility water', t.loc.hot);
+  }
+  if (pr) {
+    const perRack = pr.avgNetW / Math.max(pr.avgItKW / 25, 1e-6);
+    add(perRack >= 100 ? 'pass' : 'fail', 'Recovery ≥ 100 W per 25 kW rack', 'Proposal power-recovery target, year-1 average', `${fmt(perRack, 1)} W`);
+    add(pr.avgNetW > 0 ? 'pass' : 'fail', 'Net output after fans and pumps', '', fmtW(pr.avgNetW));
+    add(pr.payback != null && pr.payback <= 10 ? 'pass' : 'fail', 'Simple payback ≤ 10 years', 'Proposal economic constraint', pr.payback != null ? fmt(pr.payback, 1) + ' yr' : 'not reached');
+    const b = pr.battery;
+    add(!t || pr.peakDC / 1000 <= b.chargeKW || S.dispatch === 'passthrough' ? 'pass' : 'warn', 'Battery accepts peak TEG output', 'Excess passes to the bus', `${fmtW(pr.peakDC)} vs ${fmtW(b.chargeKW * 1000)}`);
+  }
+  $('#checks').innerHTML = out.map(o => `<li><span class="chip ${o.st}">${o.st === 'pass' ? '✓ Pass' : o.st === 'warn' ? '! Check' : '✕ Fail'}</span><span class="n">${o.name}${o.sub ? `<small>${o.sub}</small>` : ''}</span><span class="val">${o.val}</span></li>`).join('');
+}
+function renderDeck() { renderChecks(); renderLive();
+  if (proj) {
+    const p = proj;
+    $('#projSummary').innerHTML = `<span>Capital <b>${fmtMoney(p.capex)}</b></span><span>NPV <b>${fmtMoney(p.npv)}</b></span><span>Levelised cost <b>${isFinite(p.lcoe) ? '$' + fmt(p.lcoe, 2) + '/kWh' : '—'}</b></span><span>Battery replacements <b>${p.replacements}</b></span>`;
+    $('#projSub').textContent = `${S.horizon} years, twelve representative months each, with ${fmt(S.degr, 1)} %/yr TEG decay and battery ageing.`;
+  }
+}
+const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+function dateLabel(t) {
+  const { day, hod, dow } = hourCtx(t);
+  const d = new Date(Date.UTC(2029, 0, 1 + (day % 365)));
+  return `Year ${Math.floor(day / 365) + 1} · ${DOW[dow]} ${d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric', timeZone: 'UTC' })} · ${String(hod).padStart(2, '0')}:00`;
+}
+function updateClock() { $('#clock').textContent = dateLabel(Math.max(0, sim.t - 1)); }
+
+/* ---------------- charts ---------------- */
+let TK = {};
+function niceTicks(min, max, n = 3) {
+  if (!(max > min)) { max = min + 1; }
+  const step0 = (max - min) / n, mag = Math.pow(10, Math.floor(Math.log10(step0))), nr = step0 / mag;
+  const step = (nr < 1.5 ? 1 : nr < 3 ? 2 : nr < 7 ? 5 : 10) * mag;
+  const lo = Math.floor(min / step + 1e-9) * step, hi = Math.ceil(max / step - 1e-9) * step, ticks = [];
+  for (let v = lo; v <= hi + step * 0.5; v += step) ticks.push(+v.toPrecision(10));
+  return { lo, hi, ticks };
+}
+function drawChart(cv) {
+  const o = cv._o; if (!o) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+  const P = { l: 52, r: 10, t: 8, b: 20 }, iw = w - P.l - P.r, ih = h - P.t - P.b;
+  const all = o.series.flatMap(s => s.values).filter(v => isFinite(v));
+  let mn = o.yMin != null ? o.yMin : Math.min(...all), mx = o.yMax != null ? o.yMax : Math.max(...all);
+  if (!all.length) { mn = 0; mx = 1; }
+  if (o.zero) { mn = Math.min(mn, 0); mx = Math.max(mx, 0); }
+  if (mx - mn < 1e-9) { mx = mn + (Math.abs(mn) || 1) * 0.1; }
+  const nt = niceTicks(mn, mx, 3), n = o.xs.length;
+  const X = o.type === 'bar' ? i => P.l + iw * (i + 0.5) / n : i => P.l + (n <= 1 ? iw / 2 : iw * i / (n - 1));
+  const Y = v => P.t + ih * (1 - (v - nt.lo) / (nt.hi - nt.lo));
+  cv._geo = { X, Y, P, iw, ih, n };
+  c.font = `500 11px ${TK.mono}`; c.textBaseline = 'middle';
+  for (const tv of nt.ticks) {
+    const y = Math.round(Y(tv)) + 0.5;
+    c.strokeStyle = tv === 0 ? TK.axis : TK.grid; c.lineWidth = 1; c.beginPath(); c.moveTo(P.l, y); c.lineTo(w - P.r, y); c.stroke();
+    c.fillStyle = TK.muted; c.textAlign = 'right'; c.fillText(o.yFmt(tv), P.l - 6, y);
+  }
+  c.textAlign = 'center'; c.textBaseline = 'top'; c.fillStyle = TK.muted;
+  (o.xTicks || []).forEach(i => { if (i < n) c.fillText(o.xFmt(i), X(i), h - P.b + 5); });
+  o.series.forEach(s => {
+    c.strokeStyle = s.color; c.fillStyle = s.color;
+    if (o.type === 'bar') {
+      const bw = Math.max(2, iw / n - 2), y0 = Y(Math.max(nt.lo, Math.min(0, nt.hi)));
+      s.values.forEach((v, i) => { if (!isFinite(v)) return; const y = Y(v), x = X(i) - bw / 2, top = Math.min(y, y0), hh = Math.max(1, Math.abs(y0 - y));
+        c.beginPath(); if (c.roundRect) c.roundRect(x, top, bw, hh, v >= 0 ? [3, 3, 0, 0] : [0, 0, 3, 3]); else c.rect(x, top, bw, hh); c.fill(); });
+    } else {
+      c.lineWidth = 2; c.lineJoin = 'round'; c.beginPath(); let st = false;
+      s.values.forEach((v, i) => { if (!isFinite(v)) return; const x = X(i), y = Y(v); st ? c.lineTo(x, y) : c.moveTo(x, y); st = true; }); c.stroke();
+      if (s.fill) { c.lineTo(X(n - 1), Y(nt.lo)); c.lineTo(X(0), Y(nt.lo)); c.closePath(); c.globalAlpha = 0.12; c.fill(); c.globalAlpha = 1; }
+      const li = s.values.length - 1; if (isFinite(s.values[li])) { c.beginPath(); c.arc(X(li), Y(s.values[li]), 3.5, 0, Math.PI * 2); c.fill(); c.strokeStyle = TK.panel; c.lineWidth = 2; c.stroke(); }
+    }
+  });
+  if (o.marker != null && o.marker >= 0 && o.marker <= n - 1) {
+    const x = X(o.marker); c.setLineDash([3, 3]); c.strokeStyle = TK.fg2; c.lineWidth = 1; c.beginPath(); c.moveTo(x, P.t); c.lineTo(x, P.t + ih); c.stroke(); c.setLineDash([]);
+    c.fillStyle = TK.fg2; c.textAlign = x > w - 90 ? 'right' : 'left'; c.textBaseline = 'top'; c.font = `500 11px ${TK.body}`; c.fillText(o.markerLabel, x + (x > w - 90 ? -5 : 5), P.t + 2);
+  }
+  if (cv._hi != null) {
+    const i = cv._hi, x = X(i);
+    c.strokeStyle = TK.fg2; c.lineWidth = 1; c.beginPath(); c.moveTo(Math.round(x) + 0.5, P.t); c.lineTo(Math.round(x) + 0.5, P.t + ih); c.stroke();
+    if (o.type !== 'bar') o.series.forEach(s => { const v = s.values[i]; if (!isFinite(v)) return; c.fillStyle = s.color; c.beginPath(); c.arc(x, Y(v), 4, 0, Math.PI * 2); c.fill(); c.strokeStyle = TK.panel; c.lineWidth = 2; c.stroke(); });
+  }
+}
+function setChart(id, o) { const cv = document.getElementById(id); cv._o = o; drawChart(cv); }
+function bindHover(cv) {
+  const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; cv.parentElement.appendChild(tip);
+  const move = e => {
+    const g = cv._geo, o = cv._o; if (!g || !o) return;
+    const rect = cv.getBoundingClientRect(), x = e.clientX - rect.left;
+    let i = o.type === 'bar' ? Math.floor((x - g.P.l) / g.iw * g.n) : Math.round((x - g.P.l) / g.iw * (g.n - 1));
+    i = clamp(i, 0, g.n - 1); cv._hi = i; drawChart(cv);
+    tip.innerHTML = `<b>${o.tipX(i)}</b>` + o.series.map(s => `<span><i style="background:${s.color}"></i>${s.name}: ${o.tipFmt(s.values[i])}</span>`).join('');
+    tip.hidden = false;
+    const tx = g.X(i) + 12, tw = tip.offsetWidth;
+    tip.style.left = (tx + tw > cv.clientWidth ? g.X(i) - tw - 12 : tx) + 'px'; tip.style.top = (cv.offsetTop + 4) + 'px';
+  };
+  cv.addEventListener('pointermove', move);
+  cv.addEventListener('pointerleave', () => { cv._hi = null; tip.hidden = true; drawChart(cv); });
+}
+function drawAllCharts() {
+  const hs = sim.hist, xs = hs.map(x => x.t);
+  const dayTicks = hs.map((x, i) => (x.t % 24 === 0 ? i : -1)).filter(i => i >= 0);
+  const xF = i => DOW[hourCtx(hs[i].t).dow], tipX = i => dateLabel(hs[i].t);
+  const col = n => css(n);
+  setChart('chP', { xs, series: [{ name: 'Net output', color: col('--s-power'), values: hs.map(x => x.p), fill: true }], zero: true,
+    yFmt: v => fmtW(v).replace(' ', ''), xTicks: dayTicks, xFmt: xF, tipX, tipFmt: v => fmtW(v) });
+  setChart('chS', { xs, series: [{ name: 'State of charge', color: col('--s-soc'), values: hs.map(x => x.soc), fill: true }], yMin: 0, yMax: 100,
+    yFmt: v => v + '%', xTicks: dayTicks, xFmt: xF, tipX, tipFmt: v => fmt(v, 1) + ' %' });
+  setChart('chT', { xs, series: [{ name: 'Return from IT', color: col('--s-hot'), values: hs.map(x => x.th) }, { name: 'Supply to IT', color: col('--s-cool'), values: hs.map(x => x.ts) }],
+    yFmt: v => fmt(v, 0) + '°', xTicks: dayTicks, xFmt: xF, tipX, tipFmt: v => fmt(v, 1) + ' °C' });
+  if (proj) {
+    const ys = proj.years, yx = ys.map(y => y.y), step = ys.length > 12 ? 5 : 2;
+    const ticks = yx.map((y, i) => (y === 1 || y % step === 0 ? i : -1)).filter(i => i >= 0);
+    setChart('chE', { xs: yx, type: 'bar', series: [{ name: 'Delivered', color: col('--s-power'), values: ys.map(y => y.kWh) }], zero: true,
+      yFmt: v => fmtKWh(v).replace(' kWh', ''), xTicks: ticks, xFmt: i => 'Yr ' + yx[i], tipX: i => `Year ${yx[i]}${ys[i].repl ? ' · battery replaced' : ''}`, tipFmt: v => fmtKWh(v) });
+    const cash = [-proj.capex, ...ys.map(y => y.cum)], cx = [0, ...yx];
+    const ct = cx.map((y, i) => (y === 0 || y % step === 0 ? i : -1)).filter(i => i >= 0);
+    setChart('chC', { xs: cx, series: [{ name: 'Cumulative cash', color: col('--s-cool'), values: cash }], zero: true,
+      yFmt: v => fmtMoney(v), xTicks: ct, xFmt: i => 'Yr ' + cx[i], tipX: i => 'End of year ' + cx[i], tipFmt: v => fmtMoney(v),
+      marker: proj.payback != null ? proj.payback : null, markerLabel: proj.payback != null ? 'Payback ' + fmt(proj.payback, 1) + ' yr' : '' });
+  }
+}
+
+/* ---------------- 3D ---------------- */
+let renderer, scene, camera, controls, dyn = null, refs = null, lastFrame = performance.now();
+const CUT_PLANE = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+const viewState = { cutaway: false, bounds: null, anim: null, sel: null };
+const TSTOPS = [[10, '#2f5fd0'], [20, '#2fb3d6'], [30, '#9fd36b'], [40, '#f2c14e'], [55, '#f07b3f'], [70, '#d6384a']].map(([t, c]) => [t, new THREE.Color(c)]);
+function tempColor(T, out = new THREE.Color()) {
+  if (T <= TSTOPS[0][0]) return out.copy(TSTOPS[0][1]);
+  for (let i = 1; i < TSTOPS.length; i++) if (T <= TSTOPS[i][0]) { const [t0, c0] = TSTOPS[i - 1], [t1, c1] = TSTOPS[i]; return out.copy(c0).lerp(c1, (T - t0) / (t1 - t0)); }
+  return out.copy(TSTOPS[TSTOPS.length - 1][1]);
+}
+const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1, ...o });
+function boxMesh(w, h, d, mat) { return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); }
+
+function init3D() {
+  const host = $('#scene');
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.localClippingEnabled = true;
+  host.appendChild(renderer.domElement);
+  scene = new THREE.Scene();
+  const bg = new THREE.Color(css('--scene')); scene.background = bg; scene.fog = new THREE.Fog(bg, 55, 130);
+  camera = new THREE.PerspectiveCamera(40, 1, 0.05, 400);
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.addEventListener('start', () => { viewState.touched = true; });
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.49; controls.minDistance = 1.5; controls.maxDistance = 110;
+  scene.add(new THREE.HemisphereLight(0xdfe9ff, 0x1b222b, 0.8));
+  const d = new THREE.DirectionalLight(0xffffff, 0.8); d.position.set(10, 18, 14); scene.add(d);
+  const d2 = new THREE.DirectionalLight(0x9fc4ff, 0.25); d2.position.set(-12, 8, -10); scene.add(d2);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), std(css('--ground'), { roughness: 1, metalness: 0 }));
+  ground.rotation.x = -Math.PI / 2; scene.add(ground);
+  const grid = new THREE.GridHelper(300, 300, new THREE.Color(css('--grid')), new THREE.Color(css('--grid'))); grid.position.y = 0.003; scene.add(grid);
+  new ResizeObserver(resize3D).observe($('.stage')); resize3D();
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let down = null;
+  renderer.domElement.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5 || !refs) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(refs.pick, true)[0];
+    if (hit) { let o = hit.object; while (o && !o.userData.tab) o = o.parent; if (o) setTab(o.userData.tab); }
+  });
+}
+function resize3D() {
+  const st = $('.stage'), w = st.clientWidth, h = st.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / Math.max(h, 1); camera.updateProjectionMatrix();
+  if (viewState.bounds && !viewState.touched) setView('overview', true);
+}
+
+function roundedPath(pts, rad = 0.3) {
+  const P = [];
+  pts.forEach(p => { if (!P.length || P[P.length - 1].distanceTo(p) > 1e-4) P.push(p.clone()); });
+  const path = new THREE.CurvePath();
+  if (P.length < 2) { path.add(new THREE.LineCurve3(P[0] || new THREE.Vector3(), (P[0] || new THREE.Vector3()).clone().add(new THREE.Vector3(0.01, 0, 0)))); return path; }
+  let cur = P[0].clone();
+  for (let i = 1; i < P.length - 1; i++) {
+    const a = P[i - 1], b = P[i], c = P[i + 1];
+    const d1 = b.clone().sub(a), d2 = c.clone().sub(b), l1 = d1.length(), l2 = d2.length();
+    d1.normalize(); d2.normalize();
+    if (d1.dot(d2) > 0.999) continue;
+    const r = Math.min(rad, l1 * 0.45, l2 * 0.45);
+    const p1 = b.clone().addScaledVector(d1, -r), p2 = b.clone().addScaledVector(d2, r);
+    if (cur.distanceTo(p1) > 1e-4) path.add(new THREE.LineCurve3(cur, p1));
+    path.add(new THREE.QuadraticBezierCurve3(p1, b.clone(), p2));
+    cur = p2;
+  }
+  path.add(new THREE.LineCurve3(cur, P[P.length - 1]));
+  return path;
+}
+function ptAt(path, u) { const p = path.getPointAt(clamp(u, 0, 0.9995)); return p || path.getPoint(0.999) || new THREE.Vector3(); }
+function tanAt(path, u) { const t = path.getTangentAt(clamp(u, 0, 0.9995)); return t || new THREE.Vector3(1, 0, 0); }
+function addPipe(pts, radius, kind, opts = {}) {
+  const path = roundedPath(pts, Math.max(radius * 2.5, 0.18));
+  const len = path.getLength();
+  const mat = std(0x888888, { roughness: 0.35, metalness: 0.35, emissive: 0x000000 });
+  const mesh = new THREE.Mesh(new THREE.TubeGeometry(path, Math.max(24, Math.round(len * 10)), radius, 14, false), mat);
+  dyn.add(mesh);
+  const ref = { path, len, mesh, mat, kind, radius, ...opts };
+  if (opts.flow !== false) {
+    const cnt = Math.max(2, Math.floor(len / 0.55));
+    const pm = new THREE.InstancedMesh(new THREE.SphereGeometry(Math.max(radius * 0.45, 0.012), 8, 6), std(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.5, transparent: true, opacity: 0.8 }), cnt);
+    dyn.add(pm); ref.particles = pm; ref.cnt = cnt; ref.phase = 0;
+  }
+  refs.pipes.push(ref);
+  if (opts.tab) { mesh.userData.tab = opts.tab; refs.pick.push(mesh); }
+  return ref;
+}
+function addCable(pts) {
+  const path = roundedPath(pts, 0.25), len = path.getLength();
+  const mesh = new THREE.Mesh(new THREE.TubeGeometry(path, Math.max(20, Math.round(len * 6)), 0.025, 6, false), std(0x3a3320, { emissive: 0x4a3810, emissiveIntensity: 0.4 }));
+  dyn.add(mesh);
+  const cnt = Math.max(2, Math.floor(len / 0.7));
+  const pm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(css('--amber')) }), cnt);
+  dyn.add(pm);
+  const ref = { path, len, particles: pm, cnt, phase: 0, mesh };
+  refs.cables.push(ref);
+  return ref;
+}
+function addLabel(key, pos, title, tab) {
+  const el = document.createElement('div'); el.className = 'tag'; el.innerHTML = `<b>${title}</b><span></span>`;
+  el.addEventListener('click', () => setTab(tab));
+  $('#labels').appendChild(el);
+  refs.labels[key] = { el, pos: pos.clone(), tab, val: $('span', el) };
+}
+
+function buildScene() {
+  if (dyn) { scene.remove(dyn); dyn.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); }); }
+  $('#labels').innerHTML = '';
+  dyn = new THREE.Group(); scene.add(dyn);
+  refs = { shells: [], tubes: [], pipes: [], cables: [], pick: [], labels: {}, spin: [] };
+  const s = S, g = hxGeometry(s), N = s.nShells, R = g.Ds / 2, L = g.L, hotTube = s.hotSide === 'tube';
+  const metal = new THREE.Color(MATERIALS[s.hxMat].color), cut = viewState.cutaway ? [CUT_PLANE] : [];
+  const headLen = Math.max(0.25, 0.4 * g.Ds), gapY = 0.55;
+  const yOf = i => 0.5 + R + (N - 1 - i) * (g.Ds + gapY);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const fl = FLUIDS[s.fluid], vdot = s.mHot / 1000, rPipeHot = clamp(Math.sqrt(vdot / (Math.PI * 2)), 0.03, 0.25);
+  const rPipeCold = clamp(Math.sqrt(s.mCold / 1000 / (Math.PI * 2)), 0.03, 0.25);
+  const notes = [];
+
+  /* heat exchanger */
+  const hx = new THREE.Group(); hx.userData.tab = 'hx'; dyn.add(hx); refs.pick.push(hx);
+  const frameMat = std(0x3b4652, { metalness: 0.4, roughness: 0.5 });
+  for (const xs of [0.18 * L, 0.82 * L]) {
+    const sad = boxMesh(0.22, yOf(0) - R * 0.2, g.Ds * 0.9, frameMat); sad.position.set(xs, (yOf(0) - R * 0.2) / 2, 0); hx.add(sad);
+  }
+  const shellMatBase = { vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, roughness: 0.4, metalness: 0.1, depthWrite: false, clippingPlanes: cut };
+  const headMat = std(metal, { metalness: 0.55, roughness: 0.38, clippingPlanes: cut, side: THREE.DoubleSide });
+  const flangeMat = std(metal, { metalness: 0.6, roughness: 0.3 });
+  const baffleMat = std(metal, { metalness: 0.4, roughness: 0.5, transparent: true, opacity: 0.55, side: THREE.DoubleSide, clippingPlanes: cut });
+  const bShape = new THREE.Shape(); const br = R * 0.97;
+  bShape.absarc(0, 0, br, Math.PI * 150 / 180, Math.PI * 390 / 180, false); bShape.closePath();
+  const bGeo = new THREE.ShapeGeometry(bShape, 20);
+  const xin = [], xout = [];
+  for (let i = 0; i < N; i++) {
+    if (!hotTube) { xin[i] = i % 2 === 0 ? 0.1 * L : 0.9 * L; xout[i] = i % 2 === 0 ? 0.9 * L : 0.1 * L; }
+    else { const j = N - 1 - i; xin[i] = j % 2 === 0 ? 0.9 * L : 0.1 * L; xout[i] = j % 2 === 0 ? 0.1 * L : 0.9 * L; }
+  }
+  for (let i = 0; i < N; i++) {
+    const y = yOf(i);
+    const geo = new THREE.CylinderGeometry(R, R, L, 48, 24, true); geo.rotateZ(-Math.PI / 2); geo.translate(L / 2, y, 0);
+    const pos = geo.attributes.position, us = new Float32Array(pos.count);
+    for (let v = 0; v < pos.count; v++) us[v] = pos.getX(v) / L;
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3));
+    const shell = new THREE.Mesh(geo, new THREE.MeshStandardMaterial(shellMatBase)); shell.renderOrder = 3; hx.add(shell);
+    refs.shells.push({ geo, us, i, xinFrac: xin[i] / L });
+    for (const xf of [0, L]) { const f = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.07, R * 1.07, 0.06, 40), flangeMat); f.rotation.z = Math.PI / 2; f.position.set(xf, y, 0); hx.add(f); }
+    for (const [xh, sg] of [[-headLen / 2, -1], [L + headLen / 2, 1]]) {
+      const h = new THREE.Mesh(new THREE.CylinderGeometry(R, R, headLen, 40, 1, true), headMat); h.rotation.z = Math.PI / 2; h.position.set(xh, y, 0); hx.add(h);
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), headMat);
+      dome.scale.y = 0.45; dome.rotation.z = sg > 0 ? -Math.PI / 2 : Math.PI / 2; dome.position.set(sg > 0 ? L + headLen : -headLen, y, 0); hx.add(dome);
+    }
+    const nVis = Math.min(g.Nt, 140), rt = Math.max(g.Do / 2, 0.005);
+    const tgeo = new THREE.CylinderGeometry(rt, rt, L, 6, 1, true); tgeo.rotateZ(-Math.PI / 2); tgeo.translate(L / 2, 0, 0);
+    const tm = new THREE.InstancedMesh(tgeo, std(0xffffff, { roughness: 0.35, metalness: 0.3 }), nVis);
+    const rb = Math.max(g.Db / 2 - rt, rt), m4 = new THREE.Matrix4(), pass = [];
+    for (let k = 0; k < nVis; k++) {
+      const rr = rb * Math.sqrt((k + 0.5) / nVis), th = k * 2.39996, yo = rr * Math.cos(th);
+      m4.makeTranslation(0, y + yo, rr * Math.sin(th)); tm.setMatrixAt(k, m4); tm.setColorAt(k, new THREE.Color(1, 1, 1));
+      pass[k] = clamp(Math.floor((1 - (yo / rb + 1) / 2) * g.Np), 0, g.Np - 1);
+    }
+    hx.add(tm); refs.tubes.push({ tm, pass, i, nVis });
+    const nb = Math.min(g.nBaff, 40);
+    for (let b = 0; b < nb; b++) { const m = new THREE.Mesh(bGeo, baffleMat); m.rotation.y = Math.PI / 2; if (b % 2) m.rotation.x = Math.PI; m.position.set((b + 1) * L / (nb + 1), y, 0); hx.add(m); }
+    if (g.Nt > nVis) notes.push(`Showing ${nVis} of ${g.Nt} tubes per shell`);
+  }
+  // shell-side connectors between stacked shells
+  const rNoz = hotTube ? rPipeCold : rPipeHot, rTubeNoz = hotTube ? rPipeHot : rPipeCold;
+  for (let i = 0; i < N - 1; i++) {
+    const x = hotTube ? xin[i] : xout[i];
+    addPipe([V(x, yOf(i) - R * 0.9, 0), V(x, yOf(i + 1) + R * 0.9, 0)], rNoz * 0.9, 'shellLink', { idx: i, flow: false });
+  }
+  // tube-side (head) connectors
+  const xL = -headLen / 2, xR = L + headLen / 2, xStat = hotTube ? xL : xR, xOther = hotTube ? xR : xL;
+  const order = [...Array(N).keys()]; if (!hotTube) order.reverse();
+  const tExit = k => (g.Np % 2 === 0 ? xStat : (k % 2 === 0 ? xOther : xStat));
+  const tEntry = k => (g.Np % 2 === 0 ? xStat : (k % 2 === 0 ? xStat : xOther));
+  for (let k = 0; k < N - 1; k++) {
+    const a = order[k], b = order[k + 1], x = tExit(k);
+    addPipe([V(x, yOf(a) + (yOf(b) > yOf(a) ? R * 0.9 : -R * 0.9), 0), V(x, yOf(b) + (yOf(b) > yOf(a) ? -R * 0.9 : R * 0.9), 0)], rTubeNoz * 0.9, 'tubeLink', { idx: k, flow: false });
+  }
+  // external ports
+  let hotIn, hotOut, coldIn, coldOut;
+  if (hotTube) {
+    hotIn = V(tEntry(0), yOf(order[0]), R); hotOut = V(tExit(N - 1), yOf(order[N - 1]), R);
+    coldIn = V(xin[N - 1], yOf(N - 1), -R); coldOut = V(xout[0], yOf(0), -R);
+  } else {
+    hotIn = V(xin[0], yOf(0), R); hotOut = V(xout[N - 1], yOf(N - 1), R);
+    coldIn = V(tEntry(0), yOf(order[0]), -R); coldOut = V(tExit(N - 1), yOf(order[N - 1]), -R);
+  }
+
+  /* data hall */
+  const hall = new THREE.Group(); hall.userData.tab = 'dc'; dyn.add(hall); refs.pick.push(hall);
+  const nR = Math.max(1, Math.round(s.pIT / s.rackDens)), nVisR = Math.min(nR, 72), perRow = Math.min(nVisR, 12), rows = Math.ceil(nVisR / perRow);
+  const hallRight = -3.4, rowLen = perRow * 0.62, hallLeft = hallRight - rowLen - 2.6, zSpan = rows * 2.6 + 1.6;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallRight - hallLeft, zSpan), std(css('--floor'), { roughness: 0.95 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set((hallLeft + hallRight) / 2, 0.01, 0); hall.add(floor);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(hallRight - hallLeft, 3.6, zSpan)), new THREE.LineBasicMaterial({ color: 0x3a4a5c }));
+  edges.position.set((hallLeft + hallRight) / 2, 1.8, 0); hall.add(edges);
+  const rackGeo = new THREE.BoxGeometry(0.6, 2.0, 1.1), rackM = new THREE.InstancedMesh(rackGeo, std(0x1c232b, { roughness: 0.7, metalness: 0.3 }), nVisR);
+  const rearGeo = new THREE.PlaneGeometry(0.54, 1.9), rearM = new THREE.InstancedMesh(rearGeo, std(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.05, roughness: 0.8 }), nVisR);
+  const ledGeo = new THREE.BoxGeometry(0.02, 1.6, 0.01), ledM = new THREE.InstancedMesh(ledGeo, new THREE.MeshBasicMaterial({ color: 0x5fd1ff }), nVisR * 2);
+  const q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1), m4 = new THREE.Matrix4();
+  const rackRear = [];
+  for (let k = 0; k < nVisR; k++) {
+    const r = Math.floor(k / perRow), c = k % perRow, x = hallLeft + 1.3 + c * 0.62 + 0.3, z = (r - (rows - 1) / 2) * 2.6, front = r % 2 === 0 ? -1 : 1;
+    m4.makeTranslation(x, 1.0, z); rackM.setMatrixAt(k, m4);
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), front < 0 ? 0 : Math.PI);
+    m4.compose(new THREE.Vector3(x, 1.0, z - front * 0.556), q, sc); rearM.setMatrixAt(k, m4);
+    rackRear.push({ x, z, dir: -front });
+    for (const dx of [-0.18, 0.18]) { m4.makeTranslation(x + dx, 1.05, z + front * 0.556); ledM.setMatrixAt(k * 2 + (dx > 0 ? 1 : 0), m4); }
+  }
+  hall.add(rackM, rearM, ledM); refs.rear = rearM; refs.led = ledM;
+  if (nR > nVisR) notes.push(`Showing ${nVisR} of ${nR} racks`);
+  const zHotHdr = 0.5, zSupHdr = -0.5;
+  const pump = boxMesh(1.0, 0.9, 0.8, std(0x2b3643, { metalness: 0.4, roughness: 0.5 })); pump.position.set(-1.8, 0.45, 2.3); pump.userData.tab = 'dc'; dyn.add(pump); refs.pick.push(pump);
+  const pumpMotor = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 20), std(0x46607a, { metalness: 0.5 })); pumpMotor.rotation.z = Math.PI / 2; pumpMotor.position.set(-1.8, 0.95, 2.3); dyn.add(pumpMotor);
+
+  /* piping */
+  const zH = R + 1.0, zS = R + 1.6, zC = -(R + 1.0), zC2 = -(R + 1.6);
+  const yTop = yOf(0) + R;
+  refs.hotReturn = addPipe([V(hallLeft + 0.8, 2.45, zHotHdr), V(hallRight + 0.3, 2.45, zHotHdr), V(-1.8, 2.45, zHotHdr), V(-1.8, 2.45, 2.3), V(-1.8, 0.95, 2.3)], rPipeHot, 'hot', { tab: 'dc' });
+  const pumpOut = V(-1.3, 0.45, 2.3);
+  const hotPts = [pumpOut, V(-0.6, 0.45, 2.3), V(-0.6, 0.45, zH), V(hotIn.x, 0.45, zH), V(hotIn.x, hotIn.y, zH), hotIn];
+  refs.hotFeed = addPipe(hotPts, rPipeHot, 'hot', { tab: 'hx' });
+  const supY = Math.max(3.2, yTop + 0.6);
+  refs.supply = addPipe([hotOut, V(hotOut.x, hotOut.y, zS), V(hotOut.x, supY, zS), V(-1.0, supY, zS), V(-1.0, supY, zSupHdr), V(hallRight + 0.3, 2.95, zSupHdr), V(hallLeft + 0.8, 2.95, zSupHdr)], rPipeHot, 'sup', { tab: 'dc' });
+  // cold source
+  const tx = L * 0.5, tz = -(R + 5.2), tower = new THREE.Group(); tower.userData.tab = 'hx'; dyn.add(tower); refs.pick.push(tower);
+  if (s.coldSource === 'tower') {
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.6, 2.8, 24), std(0x2a3642, { roughness: 0.8 })); body.position.set(tx, 1.4, tz); tower.add(body);
+    const fan = new THREE.Group(); fan.position.set(tx, 2.86, tz);
+    for (let k = 0; k < 4; k++) { const bl = boxMesh(1.9, 0.03, 0.22, std(0x8796a5, { metalness: 0.5 })); bl.rotation.y = k * Math.PI / 4; fan.add(bl); }
+    tower.add(fan); refs.spin.push(fan);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.06, 8, 32), std(0x55677a)); ring.rotation.x = Math.PI / 2; ring.position.set(tx, 2.85, tz); tower.add(ring);
+  } else {
+    const body = boxMesh(3.0, 1.8, 1.6, std(0x2a3642, { roughness: 0.7 })); body.position.set(tx, 0.9, tz); tower.add(body);
+    for (let k = 0; k < 6; k++) { const l = boxMesh(0.03, 1.4, 1.62, std(0x3e4d5d)); l.position.set(tx - 1.2 + k * 0.48, 0.9, tz); tower.add(l); }
+    const comp = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.7, 20), std(0x5b6f83, { metalness: 0.5 })); comp.position.set(tx + 0.9, 2.15, tz); tower.add(comp);
+  }
+  const towerH = s.coldSource === 'tower' ? 2.8 : 1.8;
+  refs.coldSupply = addPipe([V(tx + 1.4, 0.55, tz), V(coldIn.x + 0.001 + (coldIn.x > tx ? 0 : 0), 0.55, tz), V(coldIn.x, 0.55, zC), V(coldIn.x, coldIn.y, zC), coldIn], rPipeCold, 'coldIn', { tab: 'hx' });
+  const cy = Math.max(towerH + 0.5, yTop + 0.5);
+  refs.coldReturn = addPipe([coldOut, V(coldOut.x, coldOut.y, zC2), V(coldOut.x, cy, zC2), V(tx, cy, zC2), V(tx, cy, tz), V(tx, towerH - 0.1, tz)], rPipeCold, 'coldOut', { tab: 'hx' });
+
+  /* TEG array */
+  const tegG = new THREE.Group(); tegG.userData.tab = 'teg'; dyn.add(tegG); refs.pick.push(tegG);
+  const r0 = solveSystem(S, S.pIT * S.util / 100, S.tcIn, 1, true), nMods = r0.teg ? r0.teg.n : 0;
+  const side = s.modSide / 1000, cap = 3500, k = Math.max(1, Math.ceil(nMods / cap)), vSide = side * Math.sqrt(k), pitch = vSide * 1.12;
+  const slots = [];
+  let tegAnchor = V(L / 2, yTop + 0.4, 0);
+  const cyl = (cx0, cx1, cy0, cz0, rad, arcFrac, dirX = true) => {
+    const nx = Math.max(1, Math.floor((cx1 - cx0) / pitch)), ringN = Math.max(1, Math.floor(2 * Math.PI * rad * arcFrac / pitch));
+    for (let a = 0; a < nx; a++) for (let b = 0; b < ringN; b++) {
+      const phi = (b - (ringN - 1) / 2) * pitch / rad, x = cx0 + (a + 0.5) * (cx1 - cx0) / nx;
+      slots.push({ p: V(x, cy0 + rad * Math.cos(phi), cz0 + rad * Math.sin(phi)), nrm: V(0, Math.cos(phi), Math.sin(phi)) });
+    }
+  };
+  if (s.location === 'C1') {
+    const arc = 0.7 * s.coverage / 100;
+    for (let i = 0; i < N; i++) cyl(0.15, L - 0.15, yOf(i), 0, R + 0.004, arc);
+    tegAnchor = V(L / 2, yTop + 0.35, 0);
+  } else if (s.location === 'C2') {
+    const hy = yOf(hotTube ? order[0] : order[N - 1] ?? 0), hx0 = xStat - headLen / 2, hx1 = xStat + headLen / 2;
+    cyl(hx0, hx1, yOf(hotTube ? 0 : N - 1), 0, R + 0.004, 0.7 * s.coverage / 100);
+    tegAnchor = V(xStat, yOf(hotTube ? 0 : N - 1) + R + 0.35, 0);
+  } else if (s.location === 'C3') {
+    const path = refs.hotFeed.path, plen = refs.hotFeed.len, wrap = Math.min(s.wrapLen, plen - 0.3), rP = rPipeHot + 0.004;
+    if (s.wrapLen > plen - 0.3) notes.push(`Wrap drawn over ${fmt(wrap, 1)} m of ${fmt(s.wrapLen, 1)} m`);
+    const ringN = Math.max(1, Math.floor(2 * Math.PI * rP * 0.75 * s.coverage / 100 / pitch)), nAlong = Math.max(1, Math.floor(wrap / pitch));
+    for (let a = 0; a < nAlong; a++) {
+      const u = clamp(1 - (0.3 + a * pitch) / plen, 0, 1), p = ptAt(path, u), tg = tanAt(path, u).normalize();
+      const n1 = Math.abs(tg.y) < 0.9 ? V(0, 1, 0).cross(tg).normalize() : V(1, 0, 0).cross(tg).normalize(), n2 = tg.clone().cross(n1).normalize();
+      for (let b = 0; b < ringN; b++) { const ph = (b - (ringN - 1) / 2) * pitch / rP; const nrm = n2.clone().multiplyScalar(Math.cos(ph)).addScaledVector(n1, Math.sin(ph)).normalize(); slots.push({ p: p.clone().addScaledVector(nrm, rP), nrm }); }
+    }
+    tegAnchor = ptAt(path, 1 - (0.3 + wrap / 2) / plen).add(V(0, 0.5, 0));
+  } else if (s.location === 'A') {
+    const cols = Math.max(1, Math.floor(0.54 / pitch)), rowsT = Math.max(1, Math.floor(1.9 * 0.7 * s.coverage / 100 / pitch));
+    for (const rr of rackRear) for (let a = 0; a < cols; a++) for (let b = 0; b < rowsT; b++) {
+      slots.push({ p: V(rr.x - 0.27 + (a + 0.5) * 0.54 / cols, 1.95 - (b + 0.5) * pitch, rr.z + rr.dir * 0.565), nrm: V(0, 0, rr.dir) });
+    }
+    tegAnchor = V((hallLeft + hallRight) / 2, 3.9, 0);
+  }
+  if (s.location === 'B') {
+    const sx = L * 0.55, sz = zS + 2.3, plates = clamp(Math.ceil(nMods / 240), 2, 60), depth = plates * 0.09;
+    const base = boxMesh(1.3, 0.2, depth + 0.3, std(0x2b3643)); base.position.set(sx, 0.1, sz); tegG.add(base);
+    refs.stackGlow = [];
+    for (let p = 0; p < plates; p++) {
+      const pl = boxMesh(1.1, 1.1, 0.05, std(0x8c98a5, { metalness: 0.5, roughness: 0.4 })); pl.position.set(sx, 0.8, sz - depth / 2 + p * 0.09); tegG.add(pl);
+      if (p < plates - 1) { const gm = std(0x2a2f36, { emissive: new THREE.Color(css('--amber')), emissiveIntensity: 0.3 }); const gl = boxMesh(1.04, 1.04, 0.035, gm); gl.position.set(sx, 0.8, sz - depth / 2 + p * 0.09 + 0.045); tegG.add(gl); refs.stackGlow.push(gm); }
+    }
+    const tapX = Math.min(hotIn.x, L * 0.3);
+    refs.bypassIn = addPipe([V(tapX, 0.45, zH), V(tapX, 0.45, sz - depth / 2 - 0.3), V(sx - 0.4, 0.45, sz - depth / 2 - 0.3), V(sx - 0.4, 0.6, sz - depth / 2 - 0.05)], rPipeHot * 0.6, 'hot', { tab: 'teg' });
+    refs.bypassOut = addPipe([V(sx + 0.4, 0.6, sz + depth / 2 + 0.05), V(sx + 0.4, 0.45, sz + depth / 2 + 0.3), V(sx + 1.2, 0.45, sz + depth / 2 + 0.3), V(sx + 1.2, 0.45, zS + 0.3), V(hotOut.x, 0.45, zS + 0.3)], rPipeHot * 0.6, 'bypassOut', { tab: 'teg' });
+    tegAnchor = V(sx, 1.6, sz);
+  }
+  if (slots.length) {
+    const nShow = Math.min(slots.length, Math.ceil(nMods / k) || slots.length);
+    const tileM = std(0x2a2f36, { emissive: new THREE.Color(css('--amber')), emissiveIntensity: 0.3, roughness: 0.5 });
+    const sinkCol = s.sink === 'coldplate' ? 0x3c6f9e : 0xb5bec8;
+    const tiles = new THREE.InstancedMesh(new THREE.BoxGeometry(vSide, 0.006, vSide), tileM, nShow);
+    const finH = s.sink === 'coldplate' ? 0.012 : s.sink === 'forced' ? 0.035 : 0.05;
+    const fins = new THREE.InstancedMesh(new THREE.BoxGeometry(vSide * 0.96, finH, vSide * 0.96), std(sinkCol, { metalness: 0.5, roughness: 0.4 }), nShow);
+    const up = V(0, 1, 0), qq = new THREE.Quaternion(), one = V(1, 1, 1);
+    for (let i = 0; i < nShow; i++) {
+      const sl = slots[Math.floor(i * slots.length / nShow)];
+      qq.setFromUnitVectors(up, sl.nrm);
+      m4.compose(sl.p.clone().addScaledVector(sl.nrm, 0.003), qq, one); tiles.setMatrixAt(i, m4);
+      m4.compose(sl.p.clone().addScaledVector(sl.nrm, 0.006 + finH / 2), qq, one); fins.setMatrixAt(i, m4);
+    }
+    tegG.add(tiles, fins); refs.tileMat = tileM;
+    if (k > 1) notes.push(`Each drawn tile stands for ${k} modules`);
+  }
+  if (nMods > 0 && slots.length === 0 && s.location !== 'B') notes.push('Coverage too small to draw modules');
+
+  /* electrical: converter, battery, bus */
+  const ex = Math.max(L + headLen + 2.4, 5), ez = zS + 2.6 + (s.location === 'B' ? 2.6 : 0);
+  const elec = new THREE.Group(); elec.userData.tab = 'teg'; dyn.add(elec); refs.pick.push(elec);
+  const conv = boxMesh(0.8, 1.0, 0.5, std(0x303b48, { metalness: 0.3 })); conv.position.set(ex, 0.5, ez); elec.add(conv);
+  const convLed = boxMesh(0.5, 0.05, 0.01, new THREE.MeshBasicMaterial({ color: new THREE.Color(css('--amber')) })); convLed.position.set(ex, 0.8, ez + 0.256); elec.add(convLed);
+  const batG = new THREE.Group(); batG.userData.tab = 'bat'; dyn.add(batG); refs.pick.push(batG);
+  const bx = ex + 2.4, flow = isFlow();
+  if (!flow) {
+    const cab = boxMesh(1.4, 2.1, 0.8, std(0x242e39, { metalness: 0.3, roughness: 0.6 })); cab.position.set(bx, 1.05, ez); batG.add(cab);
+    for (let k2 = 0; k2 < 8; k2++) { const sl = boxMesh(1.0, 0.012, 0.01, std(0x3d4b5b)); sl.position.set(bx - 0.12, 0.2 + k2 * 0.23, ez + 0.405); batG.add(sl); }
+    const trough = boxMesh(0.16, 1.8, 0.02, std(0x10161c)); trough.position.set(bx + 0.5, 1.05, ez + 0.405); batG.add(trough);
+    const socM = new THREE.MeshBasicMaterial({ color: new THREE.Color(css('--s-soc')) });
+    const soc = boxMesh(0.12, 1.76, 0.02, socM); soc.geometry.translate(0, 0.88, 0); soc.position.set(bx + 0.5, 0.17, ez + 0.415); batG.add(soc); refs.soc = soc;
+  } else {
+    const tankH = clamp(0.9 + Math.sqrt(s.tankL / 1000) * 0.5, 1, 3.2);
+    for (const [dx, col] of [[-0.6, 0x4a3b6b], [0.6, 0x2f5a6b]]) { const t = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, tankH, 24), std(col, { roughness: 0.5 })); t.position.set(bx + dx, tankH / 2, ez); batG.add(t); }
+    const stack = boxMesh(0.5, 0.8, 0.5, std(0x3b4756, { metalness: 0.4 })); stack.position.set(bx, 0.4, ez + 0.9); batG.add(stack);
+    const socM = new THREE.MeshBasicMaterial({ color: new THREE.Color(css('--s-soc')) });
+    const soc = boxMesh(0.12, tankH * 0.9, 0.02, socM); soc.geometry.translate(0, tankH * 0.45, 0); soc.position.set(bx - 0.6, 0.05, ez + 0.47); batG.add(soc); refs.soc = soc;
+  }
+  const busX = -2.8, busZ = ez;
+  const bus = boxMesh(1.0, 1.8, 0.6, std(0x2a3440, { metalness: 0.3 })); bus.position.set(busX, 0.9, busZ); bus.userData.tab = 'bat'; dyn.add(bus); refs.pick.push(bus);
+  const trayY = Math.max(yTop + 1.1, 3.6);
+  refs.cTeg = addCable([tegAnchor.clone(), V(tegAnchor.x, trayY, tegAnchor.z), V(tegAnchor.x, trayY, ez), V(ex, trayY, ez), V(ex, 1.0, ez)]);
+  refs.cBat = addCable([V(ex + 0.4, 0.7, ez), V(bx - 0.7, 0.7, ez)]);
+  refs.cBus = addCable([V(bx, 2.1, ez), V(bx, trayY + 0.3, ez), V(busX, trayY + 0.3, busZ), V(busX, 1.8, busZ)]);
+  refs.cHall = addCable([V(busX - 0.5, 1.2, busZ), V(hallRight + 0.2, 1.2, busZ), V(hallRight + 0.2, 1.2, Math.min(busZ, zSpan / 2 - 0.2))]);
+
+  /* labels */
+  addLabel('hall', V((hallLeft + hallRight) / 2, 3.9, -zSpan / 2), 'Data hall', 'dc');
+  addLabel('hx', V(-headLen, yTop + 2.0, -R), 'Heat exchanger', 'hx');
+  addLabel('teg', tegAnchor.clone().add(V(s.location === 'C1' ? L * 0.3 : 0, 0.2, 0)), 'TEG array', 'teg');
+  addLabel('cold', V(tx, towerH + 0.9, tz), s.coldSource === 'tower' ? 'Cooling tower' : 'Chiller', 'hx');
+  addLabel('conv', V(ex, 1.35, ez), 'DC-DC converter', 'teg');
+  addLabel('bat', V(bx, flow ? 3.4 : 2.5, ez), 'Battery', 'bat');
+  addLabel('bus', V(busX, 2.2, busZ), 'IT power bus', 'bat');
+  highlightTag(activeTab);
+
+  viewState.bounds = { hallLeft, hallRight, L, ex, bx, ez, tz, yTop, tegAnchor, zSpan };
+  $('#visNote').textContent = notes.join(' · ');
+  if (!viewState.placed) { setView('overview', true); viewState.placed = true; }
+  updateScene();
+}
+function highlightTag(tab) { if (!refs) return; Object.values(refs.labels).forEach(l => l.el.classList.toggle('sel', l.tab === tab)); }
+
+function setView(v, instant) {
+  const b = viewState.bounds; if (!b) return;
+  let tgt, pos;
+  const cx = (b.hallLeft + b.bx) / 2, span = b.bx - b.hallLeft;
+  if (v === 'overview') {
+    tgt = new THREE.Vector3(cx, 1.2, 0.5);
+    const vf = camera.fov * Math.PI / 360, hf = Math.atan(Math.tan(vf) * camera.aspect);
+    const dist = Math.max((span / 2 + 1.5) / Math.tan(Math.min(vf, hf)), 8) * 0.95;
+    pos = tgt.clone().add(new THREE.Vector3(-0.12, 0.55, 0.83).normalize().multiplyScalar(dist));
+  }
+  else if (v === 'hx') { tgt = new THREE.Vector3(b.L / 2, b.yTop / 2, 0); pos = new THREE.Vector3(b.L / 2 - 1, b.yTop + 2.5, b.L * 0.9 + 4.5); }
+  else if (v === 'teg') { tgt = b.tegAnchor.clone(); pos = b.tegAnchor.clone().add(new THREE.Vector3(-1.5, 2.2, 4.2)); }
+  else { tgt = new THREE.Vector3((b.ex + b.bx) / 2, 1, b.ez); pos = new THREE.Vector3((b.ex + b.bx) / 2 - 1.5, 3.2, b.ez + 6); }
+  if (instant || reduceMotion) { controls.target.copy(tgt); camera.position.copy(pos); controls.update(); return; }
+  viewState.anim = { t: 0, p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: tgt };
+}
+
+const _c = new THREE.Color();
+function updateScene() {
+  if (!refs || !sim.last) return;
+  const r = sim.last.r, hxr = r.hx, hotTube = S.hotSide === 'tube', g = hxGeometry(S);
+  refs.shells.forEach(sh => {
+    const x = hxr.shells[sh.i]; if (!x) return;
+    const tin = hotTube ? x.cIn : x.hIn, tout = hotTube ? x.cOut : x.hOut, col = sh.geo.attributes.color;
+    for (let v = 0; v < sh.us.length; v++) { const f = sh.xinFrac < 0.5 ? sh.us[v] : 1 - sh.us[v]; tempColor(tin + (tout - tin) * clamp(f, 0, 1), _c); col.setXYZ(v, _c.r, _c.g, _c.b); }
+    col.needsUpdate = true;
+  });
+  refs.tubes.forEach(t => {
+    const x = hxr.shells[t.i]; if (!x) return;
+    const tin = hotTube ? x.hIn : x.cIn, tout = hotTube ? x.hOut : x.cOut;
+    for (let k = 0; k < t.nVis; k++) { tempColor(tin + (tout - tin) * (t.pass[k] + 0.5) / g.Np, _c); t.tm.setColorAt(k, _c); }
+    t.tm.instanceColor.needsUpdate = true;
+  });
+  const tempOf = p => {
+    switch (p.kind) {
+      case 'hot': return r.Th; case 'sup': return r.Tsup; case 'coldIn': return r.Tcin; case 'coldOut': return hxr.TcOut;
+      case 'bypassOut': return r.teg ? r.teg.Tf - (r.Th - r.teg.Tf) : r.Th;
+      case 'shellLink': { const x = hxr.shells[p.idx]; return hotTube ? (hxr.shells[p.idx + 1] || x).cOut : x.hOut; }
+      case 'tubeLink': { const x = hxr.shells[hotTube ? p.idx : S.nShells - 1 - p.idx]; return hotTube ? x.hOut : x.cOut; }
+    } return 30;
+  };
+  refs.pipes.forEach(p => { tempColor(tempOf(p), p.mat.color); p.mat.emissive.copy(p.mat.color).multiplyScalar(0.12); p.temp = tempOf(p); });
+  if (refs.rear) { tempColor(COOLING[S.cooling].capture >= 0.99 ? S.coldAisle + S.serverDT : r.Th, refs.rear.material.color); refs.rear.material.emissive.copy(refs.rear.material.color); }
+  const t = r.teg, pm = t ? t.mod.P : 0, glow = clamp(Math.sqrt(Math.max(pm, 0) / 0.4), 0.04, 1);
+  if (refs.tileMat) refs.tileMat.emissiveIntensity = 0.15 + glow * 1.1;
+  if (refs.stackGlow) refs.stackGlow.forEach(m => { m.emissiveIntensity = 0.15 + glow * 1.1; });
+  if (refs.soc) refs.soc.scale.y = Math.max(0.01, sim.bat.soc);
+  // labels
+  const Ls = refs.labels, bs = sim.last.bs || { toBus: 0 };
+  const set = (k, html) => { if (Ls[k]) Ls[k].val.innerHTML = html; };
+  set('hall', `${fmt(r.pIT, 0)} kW IT · supply ${fmt(r.Tsup, 1)} °C`);
+  set('hx', `${fmtW(hxr.Q)} · ${fmt(r.Th, 1)} → ${fmt(hxr.ThOut, 1)} °C`);
+  set('teg', t ? `${fmtW(r.Pnet)} net · ΔT<sub>j</sub> ${fmt(t.mod.dTj, 1)} K` : 'No modules');
+  set('cold', `${fmt(r.Tcin, 1)} → ${fmt(hxr.TcOut, 1)} °C`);
+  set('conv', t ? `${fmtW(t.Pconv)} · ${fmt(S.convEff, 1)} %` : '—');
+  set('bat', `${fmt(sim.bat.soc * 100, 0)} % · ${bs.charge > 0 ? 'charging' : bs.dis > 0 ? 'discharging' : 'idle'}`);
+  set('bus', `${fmtW(bs.toBus * 1000)} delivered`);
+}
+
+function animatePipes(dt) {
+  if (!refs) return;
+  const m4 = new THREE.Matrix4(), r = sim.last && sim.last.r;
+  const vis = v => clamp(v, 0.25, 3.5);
+  refs.pipes.forEach(p => {
+    if (!p.particles) return;
+    let v = 1;
+    if (r) { const sh = r.hx.shells[0]; v = p.kind === 'coldIn' || p.kind === 'coldOut' ? (S.hotSide === 'tube' ? sh.us : sh.vt) * 1.5 : (S.hotSide === 'tube' ? sh.vt : sh.us) * 1.5; }
+    if (!reduceMotion && sim.playing) p.phase = (p.phase + vis(v) * dt / p.len) % 1;
+    for (let i = 0; i < p.cnt; i++) { const u = ((i / p.cnt) + p.phase) % 1; const pt = ptAt(p.path, u); m4.makeTranslation(pt.x, pt.y, pt.z); p.particles.setMatrixAt(i, m4); }
+    p.particles.instanceMatrix.needsUpdate = true;
+    if (p.temp != null) tempColor(p.temp + 6, p.particles.material.color);
+  });
+  const pw = r ? r.Pnet : 0, bs = sim.last && sim.last.bs;
+  const cab = [[refs.cTeg, pw], [refs.cBat, bs ? (bs.charge || 0) * 1000 : 0], [refs.cBus, bs ? bs.toBus * 1000 : 0], [refs.cHall, bs ? bs.toBus * 1000 : 0]];
+  cab.forEach(([c, P]) => {
+    if (!c) return; const on = P > 0.5;
+    c.particles.visible = on; if (!on) return;
+    const sp = clamp(0.3 + Math.log10(P + 1) * 0.5, 0.3, 3);
+    if (!reduceMotion && sim.playing) c.phase = (c.phase + sp * dt / c.len) % 1;
+    for (let i = 0; i < c.cnt; i++) { const u = ((i / c.cnt) + c.phase) % 1, pt = ptAt(c.path, u); m4.makeTranslation(pt.x, pt.y, pt.z); c.particles.setMatrixAt(i, m4); }
+    c.particles.instanceMatrix.needsUpdate = true;
+  });
+  if (!reduceMotion && sim.playing) refs.spin.forEach(f => { f.rotation.y += dt * 3; });
+}
+
+const _v = new THREE.Vector3();
+function placeLabels() {
+  if (!refs) return;
+  const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  Object.values(refs.labels).forEach(l => {
+    _v.copy(l.pos).project(camera);
+    if (_v.z > 1 || _v.x < -1.2 || _v.x > 1.2 || _v.y < -1.2 || _v.y > 1.2) { l.el.hidden = true; return; }
+    l.el.hidden = false;
+    const x = (_v.x + 1) / 2 * w, y = (1 - _v.y) / 2 * h;
+    l.el.style.transform = `translate(${Math.round(x - l.el.offsetWidth / 2)}px, ${Math.round(y - l.el.offsetHeight - 4)}px)`;
+  });
+}
+
+let lastUI = 0, lastChart = 0;
+function frame(tNow) {
+  const dt = Math.min(0.1, (tNow - lastFrame) / 1000); lastFrame = tNow;
+  if (sim.playing) {
+    sim.acc += dt * sim.speed;
+    let steps = 0;
+    while (sim.acc >= 1 && steps < 12) { stepHour(true); sim.acc -= 1; steps++; }
+    if (steps) { updateScene(); if (tNow - lastUI > 200) { renderLive(); lastUI = tNow; } if (tNow - lastChart > 350) { drawAllCharts(); lastChart = tNow; } }
+  }
+  if (viewState.anim) {
+    const a = viewState.anim; a.t = Math.min(1, a.t + dt / 0.9); const e = a.t < 0.5 ? 2 * a.t * a.t : 1 - Math.pow(-2 * a.t + 2, 2) / 2;
+    camera.position.lerpVectors(a.p0, a.p1, e); controls.target.lerpVectors(a.t0, a.t1, e); if (a.t >= 1) viewState.anim = null;
+  }
+  controls.update();
+  animatePipes(dt);
+  renderer.render(scene, camera);
+  placeLabels();
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- boot ---------------- */
+function boot() {
+  const cs = getComputedStyle(document.documentElement);
+  TK = { grid: cs.getPropertyValue('--line').trim(), axis: cs.getPropertyValue('--line-2').trim(), muted: cs.getPropertyValue('--muted').trim(),
+    fg2: cs.getPropertyValue('--fg-2').trim(), panel: cs.getPropertyValue('--panel').trim(), mono: "'IBM Plex Mono', ui-monospace, monospace", body: "'Barlow', system-ui, sans-serif" };
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  $('#scenario').addEventListener('change', e => { if (e.target.value) applyScenario(e.target.value); });
+  const play = $('#play');
+  const syncPlay = () => { play.textContent = sim.playing ? 'Pause' : 'Run'; };
+  play.addEventListener('click', () => { sim.playing = !sim.playing; syncPlay(); });
+  syncPlay();
+  $('#speed').addEventListener('change', e => { sim.speed = +e.target.value; });
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+  $('#cut').addEventListener('click', e => { viewState.cutaway = !viewState.cutaway; e.currentTarget.setAttribute('aria-pressed', viewState.cutaway); buildScene(); });
+  ['chP', 'chS', 'chT', 'chE', 'chC'].forEach(id => bindHover(document.getElementById(id)));
+  new ResizeObserver(() => drawAllCharts()).observe($('.deck'));
+
+  sim.batt = makeBattery(S);
+  resimulate(); evalDesign(); proj = project(S);
+  renderControls(); renderDeck(); drawAllCharts();
+  if (window.THREE && THREE.OrbitControls) {
+    try { init3D(); buildScene(); requestAnimationFrame(frame); }
+    catch (err) { $('#visNote').textContent = '3D view could not start in this browser. The simulation and charts still run.'; console.error(err); startHeadless(); }
+  } else { $('#visNote').textContent = '3D library did not load. The simulation and charts still run.'; startHeadless(); }
+}
+function startHeadless() {
+  let last = performance.now();
+  (function tick(t) { const dt = Math.min(0.1, (t - last) / 1000); last = t;
+    if (sim.playing) { sim.acc += dt * sim.speed; let st = 0; while (sim.acc >= 1 && st < 12) { stepHour(true); sim.acc -= 1; st++; } if (st) { renderLive(); drawAllCharts(); } }
+    requestAnimationFrame(tick); })(last);
+}
+boot();
+</script>
+
+</body>
+</html>
