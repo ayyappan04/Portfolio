@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ayyappan Arunachalam</title>
-<meta name="description" content="Walk around a 3D island to explore Ayyappan Arunachalam's hobbies, projects and co-op career: chemical engineering at the University of Waterloo, process engineering at Purolator.">
+<meta name="description" content="Ayyappan Arunachalam: chemical engineering student at the University of Waterloo and process engineer at Purolator. Badminton, soccer, projects and every co-op, in 3D.">
 <meta property="og:title" content="Ayyappan Arunachalam">
-<meta property="og:description" content="A walkable 3D portfolio: badminton hall, soccer pitch, projects expo and a career street with every co-op office.">
-<meta name="theme-color" content="#6fa9cf">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232fa7a4'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
+<meta property="og:description" content="Chemical engineer who builds things. Badminton, soccer, ShuttleSense, a TEG waste-heat simulator, and six co-op terms across Ontario.">
+<meta property="og:image" content="assets/img/teg-sim.jpg">
+<meta name="theme-color" content="#15191c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232b6b57'/%3E%3Cpath d='M9 22h14M16 7v15' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&display=swap" rel="stylesheet">
@@ -20,360 +21,321 @@
 } }
 </script>
 </head>
-<body>
-<canvas id="world" tabindex="0" aria-label="3D island. Use WASD or arrow keys to walk, drag to look around, or use the area buttons and the Read as a page option."></canvas>
-<div id="labels"></div>
+<body data-stage="studio">
+<canvas id="scene" aria-hidden="true"></canvas>
+<div id="fade" aria-hidden="true"></div>
+<div id="pinLabel" aria-hidden="true"></div>
 
-<header class="hud-top">
-  <div class="id">
-    <strong>Ayyappan Arunachalam</strong>
-    <span id="where">Exploring</span>
-  </div>
-  <nav class="chips" aria-label="Jump to an area">
-    <button type="button" data-go="hobbies">Hobbies</button>
-    <button type="button" data-go="projects">Projects</button>
-    <button type="button" data-go="career">Career</button>
-    <button type="button" data-go="learning">Learning</button>
+<div id="loader" aria-hidden="true">
+  <p class="ld-name">Ayyappan Arunachalam</p>
+  <div class="ld-track"><span id="loadBar"></span></div>
+  <p class="ld-pct" id="loadPct">0%</p>
+</div>
+
+<header class="top">
+  <a class="mark" href="#top">Ayyappan Arunachalam</a>
+  <nav aria-label="Chapters">
+    <a href="#hobbies" data-chapter="hobbies">Hobbies</a>
+    <a href="#projects" data-chapter="projects">Projects</a>
+    <a href="#career" data-chapter="career">Career</a>
+    <a href="#learning" data-chapter="learning">Learning</a>
   </nav>
-  <button type="button" id="readBtn" class="read">Read as a page</button>
 </header>
+<div class="rail" aria-hidden="true"><span id="railFill"></span></div>
 
-<aside id="card" class="card" aria-hidden="true" aria-live="polite">
-  <div class="card-head">
-    <div><p id="cardKicker" class="kicker"></p><h2 id="cardTitle"></h2></div>
-    <button type="button" id="cardClose" class="x" aria-label="Close">×</button>
-  </div>
-  <div id="cardBody" class="card-body"></div>
-</aside>
-
-<canvas id="minimap" width="200" height="200" aria-label="Map. Click to travel there."></canvas>
-<p class="keys" aria-hidden="true"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk · <kbd>Shift</kbd> run · drag to look · click to go</p>
-<div id="joystick" aria-hidden="true"><span></span></div>
-<div id="toast" role="status"></div>
-
-<div id="intro">
-  <div class="intro-card">
-    <p class="kicker">Portfolio · Waterloo, Ontario</p>
-    <h1>Ayyappan<br>Arunachalam</h1>
-    <p>Chemical engineering at the University of Waterloo, process engineering at Purolator, and a lot of badminton. Walk around the island to explore my hobbies, projects and every co-op office I've worked in.</p>
-    <div class="intro-actions">
-      <button type="button" id="enterBtn" class="btn big">Start exploring</button>
-      <button type="button" class="btn ghost big" onclick="document.getElementById('readBtn').click()">Read as a page</button>
+<main id="top">
+  <section data-chapter-id="intro">
+    <div class="step hero" data-stage="studio" data-key="hero">
+      <div class="panel bare">
+        <p class="eyebrow">Chemical Engineering · University of Waterloo</p>
+        <h1>Ayyappan<br>Arunachalam</h1>
+        <p class="lede">Process engineer at Purolator. On the side I build things: computer vision for badminton, a waste-heat simulator for my capstone, and a forecasting dashboard for markets.</p>
+        <p class="cta"><a href="#hobbies" data-chapter="hobbies" class="btn">Start the tour</a><a href="https://github.com/ayyappan04" class="btn ghost">GitHub</a></p>
+        <p class="scroll-hint"><span></span>Scroll to move through it</p>
+      </div>
     </div>
-    <p class="loading"><span></span>Building the island</p>
-  </div>
-</div>
+  </section>
 
-<div id="reader" hidden role="dialog" aria-modal="true" aria-label="Portfolio as a page">
-  <div class="reader-inner">
-    <div class="reader-head"><h1>Ayyappan Arunachalam</h1><button type="button" id="readerClose" class="btn ghost">Back to the island</button></div>
-    <p class="lede">Chemical engineering student at the University of Waterloo and process engineer at Purolator. <a href="https://github.com/ayyappan04">GitHub</a> · <a href="https://linkedin.com/in/ayyappan-s-arun">LinkedIn</a> · <a href="mailto:ayyappanarun28@gmail.com">Email</a></p>
-    <div id="readerBody"></div>
-  </div>
-</div>
+  <section id="hobbies" data-chapter-id="hobbies">
+    <div class="step" data-stage="studio" data-key="r88">
+      <article class="panel">
+        <p class="eyebrow">Hobbies · In the bag</p>
+        <h2>Yonex Astrox 88 D Pro</h2>
+        <p class="sub">3rd generation, silver and black</p>
+        <dl class="spec"><div><dt>Balance</dt><dd>Head-heavy</dd></div><div><dt>Shaft</dt><dd>Stiff</dd></div><div><dt>Built for</dt><dd>Rear-court attack in doubles</dd></div></dl>
+        <p>Yonex's back-court model. Steep smashes and a heavy head for when I'm the one hitting from behind.</p>
+      </article>
+    </div>
+    <div class="step" data-stage="studio" data-key="r99">
+      <article class="panel">
+        <p class="eyebrow">Hobbies · In the bag</p>
+        <h2>Yonex Astrox 99 Pro</h2>
+        <p class="sub">3rd generation, black and green, 2025</p>
+        <dl class="spec"><div><dt>Balance</dt><dd>Head-heavy</dd></div><div><dt>Shaft</dt><dd>Stiff</dd></div><div><dt>Built for</dt><dd>Maximum smash power</dd></div></dl>
+        <p>The power-first frame. When I want the smash to do the talking, this is the one I pick up. Both get used with feather shuttles, and I go through tubes of them.</p>
+      </article>
+    </div>
+    <div class="step" data-stage="hall" data-key="wide">
+      <article class="panel">
+        <p class="eyebrow">Hobbies · Badminton</p>
+        <h2>The sport I play most</h2>
+        <p>Several times a week, always with feather shuttles. I'm the director of my school's badminton club, so I'm as likely to be sorting court bookings as playing on them. It's also the reason ShuttleSense exists.</p>
+        <div class="photos two">
+          <figure class="photo"><img src="assets/img/shuttles.jpg" alt="Three Yonex feather shuttlecocks" loading="lazy"><figcaption>Yonex Aerosensa feather shuttles. Photo: Arne Nordmann, CC BY-SA 3.0</figcaption></figure>
+          <figure class="photo"><img src="assets/img/court.jpg" alt="An indoor badminton court with a wooden floor" loading="lazy"><figcaption>An indoor court. Photo: Ruturajpol, CC BY-SA 4.0</figcaption></figure>
+        </div>
+      </article>
+    </div>
+    <div class="step" data-stage="hall" data-key="drop">
+      <article class="panel">
+        <p class="eyebrow">Hobbies · Favourite shot</p>
+        <h2>Backhand cross-court drop</h2>
+        <p>From deep in my backhand corner, disguised like a clear, then cut cross-court so the shuttle stalls and dies just past the net. Scroll slowly and watch it land.</p>
+      </article>
+    </div>
+    <div class="step" data-stage="hall" data-key="club">
+      <article class="panel">
+        <p class="eyebrow">Hobbies · Club director</p>
+        <h2>Running the club</h2>
+        <p>Court bookings, sessions, and making sure a first-year can walk in during their first week and find a game.</p>
+        <figure class="photo wide"><img src="assets/img/lcw.jpg" alt="Lee Chong Wei preparing to smash" loading="lazy"><figcaption>The level we watch on repeat: Lee Chong Wei loading a smash. Photo: Antony Stanley, CC BY-SA 2.0</figcaption></figure>
+      </article>
+    </div>
+    <div class="step" data-stage="pitch" data-key="wide">
+      <article class="panel">
+        <p class="eyebrow">Hobbies · Soccer</p>
+        <h2>Right-footed winger</h2>
+        <p>FC Barcelona supporter and a Messi fan for as long as I've watched football. I like the ball at my feet, running at defenders and looking for the far post.</p>
+        <div class="photos two">
+          <figure class="photo"><img src="assets/img/messi09.jpg" alt="Lionel Messi taking a corner for FC Barcelona" loading="lazy"><figcaption>Messi for Barça, 2009. Photo: Tsutomu Takasu, CC BY 2.0</figcaption></figure>
+          <figure class="photo"><img src="assets/img/campnou.jpg" alt="Aerial view of Camp Nou" loading="lazy"><figcaption>Camp Nou. Photo: Oh-Barcelona.com, CC BY 2.0</figcaption></figure>
+        </div>
+      </article>
+    </div>
+    <div class="step" data-stage="pitch" data-key="fk">
+      <article class="panel">
+        <p class="eyebrow">Hobbies · Signature finish</p>
+        <h2>The curling free kick</h2>
+        <p>Start it outside the wall and let the spin bring it back into the top corner. My other favourite is a rabona into the top corner, which I save for when I'm feeling brave.</p>
+      </article>
+    </div>
+    <div class="step" data-stage="pitch" data-key="crane">
+      <article class="panel">
+        <p class="eyebrow">Hobbies · Campus</p>
+        <h2>Waterloo Engineering Ambassador</h2>
+        <p>Executive team, chemical engineering ambassador. I help new and future students see what Waterloo actually offers, from someone who's been through it.</p>
+        <ul class="ticks">
+          <li><strong>Plan events.</strong> Outreach days for 2,000 to 10,000+ visitors.</li>
+          <li><strong>Give tours.</strong> Campus tours, co-op Q&amp;As, webinars and talks for students and parents.</li>
+          <li><strong>Mentor.</strong> What co-op is really like, so first-years can plan theirs.</li>
+        </ul>
+        <figure class="photo wide"><img src="assets/img/engsign.jpg" alt="Waterloo Engineering sign on campus" loading="lazy"><figcaption>Waterloo Engineering. Photo: Maplefirst, CC BY-SA 4.0</figcaption></figure>
+      </article>
+    </div>
+  </section>
 
-<template id="z-badminton"><p>Badminton is the sport I play the most, usually several times a week, always with feather shuttles, and I go through tubes of them. I'm the director of my school's badminton club, which means I'm as likely to be sorting court bookings as playing on them. It's also the reason <a href="#shuttlesense">ShuttleSense</a> exists.</p>
-<h3>Favourite shot: the backhand cross-court drop</h3>
-<p>From deep in my backhand corner, disguised like a clear, then cut cross-court so the shuttle stalls and dies just past the net. The two players on court rally a few clears, then I play it.</p>
-<p class="actions"><button type="button" class="btn" data-action="drop">Play the drop now</button></p>
-<p class="muted small">The rackets I use are on the podiums at the end of the hall.</p></template>
-<template id="z-rackets"><p>Both are head-heavy, stiff Yonex frames built for attack. Walk around the podiums to see them up close.</p><div class="rackets">
-<div>
-<h4>Yonex Astrox 88 D Pro</h4>
-<p class="muted">3rd gen, silver / black</p>
-<dl class="spec">
-<div><dt>Balance</dt><dd>Head-heavy</dd></div>
-<div><dt>Shaft</dt><dd>Stiff</dd></div>
-<div><dt>Built for</dt><dd>Rear-court attack in doubles</dd></div>
-</dl>
-<p>Yonex's back-court model. Steep smashes and a heavy head for when I'm the one hitting from behind.</p>
-</div>
-<div>
-<h4>Yonex Astrox 99 Pro</h4>
-<p class="muted">3rd gen, black / green, 2025</p>
-<dl class="spec">
-<div><dt>Balance</dt><dd>Head-heavy</dd></div>
-<div><dt>Shaft</dt><dd>Stiff</dd></div>
-<div><dt>Built for</dt><dd>Maximum smash power</dd></div>
-</dl>
-<p>Yonex's power-first frame. When I want the smash to do the talking, this is the one I pick up.</p>
-</div>
-</div></template>
-<template id="z-soccer"><p>FC Barcelona supporter and a Messi fan for as long as I've watched football. On the pitch I'm a right-footed winger: I like the ball at my feet, running at defenders and looking for the far post.</p><dl class="facts">
-<div><dt>Club</dt><dd>FC Barcelona</dd></div>
-<div><dt>Player</dt><dd>Lionel Messi</dd></div>
-<div><dt>Position</dt><dd>Winger, right-footed</dd></div>
-<div><dt>Signature</dt><dd>Rabona into the top corner, curling free kicks</dd></div>
-</dl>
-<h3>Try it</h3>
-<p>Walk into the ball to dribble and shoot, or watch my two favourite finishes.</p>
-<p class="actions"><button type="button" class="btn" data-action="fk">Curling free kick</button><button type="button" class="btn ghost" data-action="rabona">Rabona, top corner</button></p></template>
-<template id="z-campus">
-<p>I've been a Waterloo Engineering Ambassador since 2023 and now sit on the executive team as the chemical engineering ambassador. The job is simple to describe: help new and future students see what Waterloo actually offers, honestly, from someone who's been through it.</p>
-<ul class="plain">
-<li><strong>Plan the events.</strong> Outreach days that serve anywhere from 2,000 to 10,000+ visitors, coordinated across students, staff, alumni and families.</li>
-<li><strong>Give the tours.</strong> Campus tours, co-op Q&amp;As, webinars and talks for prospective students and their parents.</li>
-<li><strong>Mentor new students.</strong> Share what co-op is really like, from asphalt labs to a provincial ministry to a courier network, so first-years can plan theirs.</li>
-<li><strong>Lead the club.</strong> As director of the badminton club, I keep a community running that new students can walk into in their first week.</li>
-</ul>
-</template>
-<template id="z-shuttlesense">
-<header class="phead">
+  <section id="projects" data-chapter-id="projects">
+    <div class="step" data-stage="gallery" data-key="wide">
+      <article class="panel">
+        <p class="eyebrow">Projects</p>
+        <h2>Three builds I'd walk you through</h2>
+        <p>Every screen in this room is a real screenshot of the project. Each one is on GitHub.</p>
+      </article>
+    </div>
+    <div class="step" data-stage="gallery" data-key="shuttlesense">
+      <article class="panel">
+        <p class="eyebrow">Project · 2025 – now</p>
+        <h2>ShuttleSense</h2>
+        <p class="sub">An AI badminton coach that analyses match video, and tells you how confident it actually is.</p>
+        <p>Upload a match and get court detection, player tracking, pose-based technique and footwork analysis, rally segmentation and timestamped coaching notes. The rule I built it around: never invent a number. Every metric carries a confidence score, and it won't call a rally outcome it can't see.</p>
+        <details><summary>What I measured</summary>
+          <p>Tested on 13.6 minutes of openly licensed real footage. Pose estimation reaches 76–88% coverage; court detection scores 0.89 on broadcast and falls back safely otherwise. Tracking still fragments (11–65 tracks for 2–4 players), and I publish that alongside the wins. Long footage exposed a 94 GB memory blow-up, which I rewrote to stream at about 1.3 GB.</p>
+          <p class="stack">FastAPI · React 19 · OpenCV · MediaPipe · Supabase · 72 endpoints · 248 tests</p>
+        </details>
+        <p class="links"><a href="https://github.com/ayyappan04/badminton-coach">Repository</a></p>
+      </article>
+    </div>
+    <div class="step" data-stage="gallery" data-key="teg">
+      <article class="panel">
+        <p class="eyebrow">Capstone · 2026 – now</p>
+        <h2>TEG Loop Simulator</h2>
+        <p class="sub">Can a data centre's waste heat make electricity without breaking its cooling limits?</p>
+        <p>An hour-by-hour model of the whole loop: data hall, shell-and-tube exchanger, thermoelectric array, DC-DC converter, battery and back to the IT bus. It lets our team compare 5 cooling architectures and 6 battery chemistries in minutes.</p>
+        <details><summary>The model</summary>
+          <p>Gnielinski and Sieder–Tate on the tube side, Kern's method on the shell side, ε-NTU per shell, and a 1-D TEG model with Peltier, Fourier and Joule terms solved iteratively. Every design is checked against our proposal limits: ≤ 1 °C coolant change, ≤ 5% added pressure drop, &lt; 2% pump power, ≥ 100 W per 25 kW rack, payback ≤ 10 years.</p>
+          <p>It guides a physical prototype: a Bi₂Te₃ TEG on a shell-and-tube exchanger charging a sodium-ion battery, checked with ANSYS CFD/FEA and cycling tests.</p>
+        </details>
+        <figure class="photo wide"><img src="assets/img/servers.jpg" alt="Rows of servers in a data centre" loading="lazy"><figcaption>Where the heat comes from. Photo: BalticServers.com, CC BY-SA 3.0</figcaption></figure>
+        <p class="links"><a href="teg/" target="_blank" rel="noopener">Open the live simulator</a><a href="https://github.com/ayyappan04/teg-loop-simulator-">Repository</a></p>
+      </article>
+    </div>
+    <div class="step" data-stage="gallery" data-key="kronos">
+      <article class="panel">
+        <p class="eyebrow">Project · 2026</p>
+        <h2>Kronos portfolio dashboard</h2>
+        <p class="sub">A forecasting dashboard that grades its own predictions against what the market actually did.</p>
+        <p>I forked Kronos, an open-source foundation model that reads candlesticks like a language, and built a six-tab Streamlit dashboard on top for an eight-stock watchlist. Every 30-day forecast is saved with its date, then scored day by day on MAE, RMSE and direction hit-rate.</p>
+        <p class="muted small">The screen shows a forecast-vs-actual example from the Kronos model repository. It's a learning project about evaluation, not investment advice.</p>
+        <p class="links"><a href="https://github.com/ayyappan04/Kronos">Repository</a></p>
+      </article>
+    </div>
+  </section>
 
-<p class="pline">An AI badminton coach that analyses match video, and tells you how confident it actually is.</p>
-<p class="meta"><span>2025 – now</span><span>Python, FastAPI, React 19, OpenCV, MediaPipe, Supabase</span><a href="https://github.com/ayyappan04/badminton-coach">Repository</a></p>
-</header>
-<div aria-label="ShuttleSense details" class="ptabs" role="tablist">
-<button aria-selected="true" role="tab">Why</button>
-<button aria-selected="false" role="tab" tabindex="-1">How it works</button>
-<button aria-selected="false" role="tab" tabindex="-1">What I measured</button>
-<button aria-selected="false" role="tab" tabindex="-1">Stack</button>
-</div>
-<div class="ppanels">
-<div role="tabpanel">
-<p>Most club players never get regular coaching. They do have phones. ShuttleSense takes a recording of your match and returns court detection, player tracking, pose-based technique and footwork analysis, rally segmentation, tactical patterns and timestamped coaching notes that link back to the exact moment in the video.</p>
-<p>The rule I built it around: <strong>never invent a number.</strong> Every metric carries a confidence score and a "computed from" note. When the pipeline can't see something, it says so. It won't call a rally a winner or an unforced error, because without shuttle-landing detection it can't know.</p>
-<p>It's in a pilot with 30+ players at a community centre. I track uploads, active users and how often they accept a recommendation, and use that to decide what to build next.</p>
-</div>
-<div hidden="" role="tabpanel">
-<ol aria-label="Video analysis pipeline, in order" class="pipeline">
-<li>Probe</li><li>Validate</li><li>Normalize</li><li>Quality gate</li><li>Court detection</li><li>Tracking</li><li>Pose</li><li>Shuttle</li><li>Rally</li><li>Phases</li><li>Shots</li><li>Biomechanics</li><li>Tactics</li><li>Insights</li><li>Profile</li>
-</ol>
-<p>Fifteen stages, run by a worker that pulls jobs off a Postgres queue. The architecture is split along one line: <strong>large video bytes never touch the API.</strong> The browser uploads straight to private object storage with resumable uploads, the worker reads from storage, and playback uses short-lived signed URLs. The React app on Vercel and the FastAPI service only exchange small JSON control calls.</p>
-<p>The in-app coach answers questions like "why am I losing points at the net?" by retrieving from your own stored analysis with fixed templates. There's deliberately no language model in that path, so it can't hallucinate a statistic. Injury questions are caught before routing and referred to a physiotherapist.</p>
-</div>
-<div hidden="" role="tabpanel">
-<p>I tested it on 13.6 minutes of openly licensed real badminton footage, from 320×240 school games to 1080p tour broadcast, plus a 14-clip synthetic matrix for lighting, blur, shake and occlusion. I published the bad results alongside the good.</p>
-<table class="results">
-<thead><tr><th scope="col">Signal</th><th scope="col">Result</th><th scope="col">Verdict</th></tr></thead>
-<tbody>
-<tr><td>Pose estimation</td><td>76–88% coverage, 0.72–0.85 confidence</td><td><span class="v ok">Usable</span></td></tr>
-<tr><td>Court detection</td><td>0.89 on broadcast; falls back to manual calibration otherwise</td><td><span class="v ok">Fails safe</span></td></tr>
-<tr><td>Quality gate</td><td>Scores good footage 84, low light 52, non-badminton 53</td><td><span class="v ok">Discriminates</span></td></tr>
-<tr><td>Player tracking</td><td>11–65 tracks for 2–4 players</td><td><span class="v bad">Fragmenting</span></td></tr>
-<tr><td>Stroke counting</td><td>Up to 131 shots/min on one clip</td><td><span class="v bad">Not yet</span></td></tr>
-</tbody>
-</table>
-<p>Long real footage also exposed two crashes that short test clips never could: the pipeline was holding every frame in memory, about 94 GB for an 8-minute 1080p match. I rewrote it to stream, and memory is now bounded at about 1.3 GB.</p>
-</div>
-<div hidden="" role="tabpanel">
-<dl class="facts">
-<div><dt>Backend</dt><dd>FastAPI, SQLAlchemy 2, Alembic, 72 endpoints, 248 tests</dd></div>
-<div><dt>Vision</dt><dd>FFmpeg, OpenCV, MediaPipe; earlier prototype with YOLOv8 and BoT-SORT</dd></div>
-<div><dt>Data</dt><dd>Supabase: Postgres, Auth, Storage, Queues, Realtime, row-level security</dd></div>
-<div><dt>Frontend</dt><dd>React 19, Vite, Tailwind 4, Recharts, resumable TUS uploads</dd></div>
-<div><dt>Deploy</dt><dd>Vercel for the app, containers for API and worker</dd></div>
-</dl>
-<p class="muted">The first prototype, <a href="https://github.com/ayyappan04/badminton-cv">badminton-cv</a>, used YOLOv8 detection and Gemini-generated reports. ShuttleSense replaced the generated reports with evidence-linked insights.</p>
-</div>
-</div>
-</template>
-<template id="z-teg">
-<header class="phead">
+  <section id="career" data-chapter-id="career">
+    <div class="step" data-stage="map" data-key="overview">
+      <article class="panel">
+        <p class="eyebrow">Career</p>
+        <h2>Six co-op terms, two ventures</h2>
+        <p>Every pin on this table is a real office, from Waterloo to downtown Toronto. Keep scrolling to visit each one, most recent first.</p>
+        <p class="muted small">Map drawn from Natural Earth data: Lake Ontario, the 401, 403, 407 and QEW, and the Grand River through Waterloo Region.</p>
+      </article>
+    </div>
+    <div class="step" data-stage="map" data-key="purolator" data-pin="purolator" data-label="Purolator · Mississauga">
+      <article class="panel">
+        <p class="eyebrow">May 2026 – now · 2600 Meadowvale Blvd, Mississauga</p>
+        <h2>Process Engineer, Purolator</h2>
+        <p class="sub">Canada's courier network. A co-op that became a part-time role alongside school.</p>
+        <ul class="ticks">
+          <li>Interviewed 40+ operations managers, found labour data didn't agree, built the business case and a Power Apps tracker. Labour-data accuracy up 24%.</li>
+          <li>Building computer vision on existing CCTV to measure package flow, headcount and utilization. Pilot models project 28% fewer labour hours.</li>
+          <li>Factory I/O digital twin for staffing and capacity scenarios: 22% fewer labour hours and 31% lower cost projected.</li>
+          <li>MOST time studies and cycle-time analysis to set labour standards.</li>
+        </ul>
+        <div class="photos two">
+          <figure class="photo"><img src="assets/img/puroIn.jpg" alt="Inside a Purolator sorting facility" loading="lazy"><figcaption>A Purolator sort facility. Photo: jmv, CC BY-SA 2.0</figcaption></figure>
+          <figure class="photo"><img src="assets/img/puroTruck.jpg" alt="Purolator Freight truck" loading="lazy"><figcaption>Photo: Raysonho, CC0</figcaption></figure>
+        </div>
+      </article>
+    </div>
+    <div class="step" data-stage="map" data-key="waize" data-pin="waize" data-label="wAize · Toronto">
+      <article class="panel">
+        <p class="eyebrow">2025 – now · Toronto</p>
+        <h2>COO, wAize</h2>
+        <p class="sub">A studio that builds custom software, automation and applied AI around how a business actually runs.</p>
+        <ul class="ticks">
+          <li>Own discovery, workflow mapping, scoping, demos and delivery across 10+ AI projects.</li>
+          <li>Launched voice agents for a clinic's scheduling, cancellations and follow-ups. Bookings rose 9%.</li>
+        </ul>
+        <p class="links"><a href="https://www.waize.dev/">waize.dev</a></p>
+      </article>
+    </div>
+    <div class="step" data-stage="map" data-key="promptogo" data-pin="promptogo" data-label="PrompToGo · North York">
+      <article class="panel">
+        <p class="eyebrow">2025 – now · North York and London, ON</p>
+        <h2>Co-founder, PrompToGo</h2>
+        <p class="sub">In-person AI classes where teens build real games, websites and apps. I design the curriculum.</p>
+        <ul class="ticks">
+          <li>Grew from 20 students to 40 in the second cohort; 95% continued to the next course.</li>
+          <li>Recruited and trained 12 instructors.</li>
+          <li>20 student and parent interviews turned into curriculum changes; acquisition up 18%, conversion up 23%.</li>
+        </ul>
+        <p class="links"><a href="https://promptogo.ca/">promptogo.ca</a></p>
+      </article>
+    </div>
+    <div class="step" data-stage="map" data-key="hgc" data-pin="hgc" data-label="HGC · Mississauga">
+      <article class="panel">
+        <p class="eyebrow">Sep – Dec 2025 · 2000 Argentia Rd, Plaza 1, Mississauga</p>
+        <h2>Engineering Consultant, HGC Noise Vibration Acoustics</h2>
+        <ul class="ticks">
+          <li>Paired field measurements with CadnaA noise modelling for compliance-ready reports.</li>
+          <li>Automated the proposal workflow, cutting turnaround time by 50%.</li>
+        </ul>
+        <figure class="photo strip"><img src="assets/img/argentia.jpg" alt="Argentia Rd street sign, Mississauga" loading="lazy"><figcaption>Photo: Transportfan70, CC BY-SA 4.0</figcaption></figure>
+      </article>
+    </div>
+    <div class="step" data-stage="map" data-key="uw" data-pin="uw" data-label="Engineering 6 · Waterloo">
+      <article class="panel">
+        <p class="eyebrow">May – Aug 2025 · Engineering 6, University of Waterloo</p>
+        <h2>Process Optimization Researcher</h2>
+        <p class="sub">Uranium process research.</p>
+        <ul class="ticks">
+          <li>Structured process and regulatory datasets in SQL and built lifecycle models in OpenLCA.</li>
+          <li>Power BI decision support found scenarios worth up to $20M in savings and 15% lower emissions; presented to 30+ stakeholders.</li>
+        </ul>
+        <div class="photos two">
+          <figure class="photo"><img src="assets/img/e6.jpg" alt="Engineering 6 building exterior" loading="lazy"><figcaption>Engineering 6. Photo: Victor Vucicevich, CC BY-SA 3.0</figcaption></figure>
+          <figure class="photo"><img src="assets/img/e5e6.jpg" alt="Engineering 5 and 6 buildings" loading="lazy"><figcaption>E5 and E6. Photo: Kiyan, CC BY-SA 2.0</figcaption></figure>
+        </div>
+      </article>
+    </div>
+    <div class="step" data-stage="map" data-key="pwc" data-pin="pwc" data-label="PwC · 18 York St">
+      <article class="panel">
+        <p class="eyebrow">Sep – Dec 2024 · 18 York St, Toronto</p>
+        <h2>Risk Services Associate, PwC</h2>
+        <ul class="ticks">
+          <li>Evaluated AI-enabled underwriting and client-operations products across data, model workflows, governance, controls and rollout readiness.</li>
+          <li>Found quality and risk gaps and walked business and technical teams through mitigations.</li>
+        </ul>
+      </article>
+    </div>
+    <div class="step" data-stage="map" data-key="mto" data-pin="mto" data-label="MTO · Sir William Hearst Ave">
+      <article class="panel">
+        <p class="eyebrow">Jan – Apr 2024 · Sir William Hearst Ave, Toronto</p>
+        <h2>Asset Management Engineer, Ontario Ministry of Transportation</h2>
+        <ul class="ticks">
+          <li>Multivariate model, 95% accurate on historical validation, forecasting when highway assets need rehabilitation or expansion.</li>
+          <li>Power BI and ArcGIS analytics across a $700M asset portfolio.</li>
+          <li>Co-developed a provincially used Ride Quality Index with University of Toronto researchers.</li>
+        </ul>
+        <figure class="photo wide"><img src="assets/img/hwy410.jpg" alt="Aerial view of the Highway 401, 403 and 410 interchange" loading="lazy"><figcaption>The 401 / 403 / 410 interchange. Photo: Coolcaesar, CC BY 4.0</figcaption></figure>
+      </article>
+    </div>
+    <div class="step" data-stage="map" data-key="gip" data-pin="gip" data-label="GIP · Caledon">
+      <article class="panel">
+        <p class="eyebrow">May – Aug 2023 · 10 Airport Rd, Caledon</p>
+        <h2>Materials &amp; Manufacturing Engineer, GIP</h2>
+        <p class="sub">Green Infrastructure Partners: 40+ asphalt plants and 250+ pits and quarries across Canada. I worked mainly in the recycled-asphalt lab.</p>
+        <ul class="ticks">
+          <li>QA on 150+ asphalt, aggregate and cement samples under controlled temperature, pressure, curing and moisture.</li>
+          <li>Time studies and sequencing with the plant team raised production efficiency by 18%.</li>
+        </ul>
+        <figure class="photo wide"><img src="assets/img/caledon.jpg" alt="A road through the Caledon countryside" loading="lazy"><figcaption>Caledon, Ontario. Photo: P199, CC BY-SA 3.0</figcaption></figure>
+      </article>
+    </div>
+  </section>
 
-<p class="pline">Can a data centre's low-grade waste heat make electricity, and store it, without breaking its cooling limits?</p>
-<p class="meta"><span>Capstone, 2026 – now</span><span>Heat transfer, thermoelectrics, battery storage, three.js</span><a href="https://github.com/ayyappan04/teg-loop-simulator-">Repository</a></p>
-</header>
-<div aria-label="TEG simulator details" class="ptabs" role="tablist">
-<button aria-selected="true" role="tab">The question</button>
-<button aria-selected="false" role="tab" tabindex="-1">The model</button>
-<button aria-selected="false" role="tab" tabindex="-1">Constraints</button>
-<button aria-selected="false" role="tab" tabindex="-1">Prototype</button>
-</div>
-<div class="ppanels">
-<div role="tabpanel">
-<p>Data centres dump enormous amounts of warm water. Thermoelectric generators (TEGs) can turn a temperature difference straight into electricity, but every degree you take out of the coolant loop is a degree the cooling system notices. Our capstone asks whether recovery is worth it once you respect that.</p>
-<svg aria-labelledby="loopT" class="loop" role="img" viewbox="0 0 640 124">
-<title id="loopT">Energy loop: data hall to heat exchanger to TEG array to DC-DC converter to battery and back to the IT power bus.</title>
-<defs><marker id="arr2" markerheight="6" markerwidth="6" orient="auto" refx="8" refy="5" viewbox="0 0 10 10"><path class="arrowhead" d="M0 0 10 5 0 10z"></path></marker></defs>
-<g class="loopbox"><rect height="56" rx="6" width="96" x="4" y="30"></rect><text x="52" y="63">Data hall</text></g>
-<g class="loopbox"><rect height="56" rx="6" width="150" x="124" y="30"></rect><text x="199" y="55">Shell-and-tube</text><text x="199" y="72">heat exchanger</text></g>
-<g class="loopbox hot"><rect height="56" rx="6" width="96" x="298" y="30"></rect><text x="346" y="63">TEG array</text></g>
-<g class="loopbox"><rect height="56" rx="6" width="88" x="418" y="30"></rect><text x="462" y="63">DC-DC</text></g>
-<g class="loopbox"><rect height="56" rx="6" width="96" x="530" y="30"></rect><text x="578" y="63">Battery</text></g>
-<path class="loopline" d="M100 58 H121" marker-end="url(#arr2)"></path>
-<path class="loopline" d="M274 58 H295" marker-end="url(#arr2)"></path>
-<path class="loopline" d="M394 58 H415" marker-end="url(#arr2)"></path>
-<path class="loopline" d="M506 58 H527" marker-end="url(#arr2)"></path>
-<path class="loopline back" d="M578 86 V110 H52 V89" marker-end="url(#arr2)"></path>
-<text class="looplabel" x="315" y="104">power back to the IT bus</text>
-</svg>
-<p>I built the simulator so the team could trade off 5 cooling architectures and 6 battery chemistries in minutes instead of redoing hand calculations for every design.</p>
-<p><a class="button" href="/teg/" target="_blank" rel="noopener">Open the live simulator</a></p>
-</div>
-<div hidden="" role="tabpanel">
-<p>Every hour of a simulated week is solved as a steady state: the coolant return temperature is found so that the heat exchanger plus the TEGs reject exactly the heat the IT load puts into the loop.</p>
-<dl class="facts">
-<div><dt>Tube side</dt><dd>Gnielinski (turbulent) and Sieder–Tate (laminar), blended through transition; Petukhov friction factor</dd></div>
-<div><dt>Shell side</dt><dd>Kern's method, with temperature-dependent viscosity so the flow regime can change shell to shell</dd></div>
-<div><dt>Exchanger</dt><dd>ε-NTU per shell, 1–4 shells in series</dd></div>
-<div><dt>TEG</dt><dd>1-D module with Peltier, Fourier and Joule terms; junction temperatures solved iteratively through contact, substrate, interface and heat-sink resistances</dd></div>
-<div><dt>Battery</dt><dd>LFP, NMC, LTO, sodium-ion, VRLA or vanadium flow; cycle and calendar fade, replaced at 70% state of health</dd></div>
-<div><dt>Economics</dt><dd>Ontario-style time-of-use tariff, payback, NPV and levelised cost</dd></div>
-</dl>
-</div>
-<div hidden="" role="tabpanel">
-<p>A design only passes if it clears every limit from our proposal, checked at the worst case: peak load and the warmest facility water.</p>
-<ul class="checks">
-<li>Coolant temperature change from the TEGs ≤ 1 °C</li>
-<li>Added pressure drop ≤ 5% of circuit head</li>
-<li>Pump power increase &lt; 2%</li>
-<li>Recovery ≥ 100 W per 25 kW rack</li>
-<li>Positive net output after fans and pumps</li>
-<li>Payback ≤ 10 years</li>
-<li>Hot-junction material limit and battery charge acceptance</li>
-</ul>
-</div>
-<div hidden="" role="tabpanel">
-<p>The simulation guides a physical prototype: a Bi₂Te₃ TEG on a shell-and-tube heat exchanger, charging a sodium-ion battery through a BMS.</p>
-<p>We're using ANSYS CFD and FEA to check coolant selection, geometry and thermal stress, and charge/discharge cycling to measure energy retention, degradation and recharge behaviour. Comparing the model against the test bench tells us what to change before design freeze.</p>
-</div>
-</div>
-</template>
-<template id="z-kronos">
-<header class="phead">
+  <section id="learning" data-chapter-id="learning">
+    <div class="step" data-stage="lab" data-key="wide">
+      <article class="panel">
+        <p class="eyebrow">Learning · Fall 2026, 4A</p>
+        <h2>What I'm working on now</h2>
+        <ul class="ticks">
+          <li><strong>Plant design in Aspen Plus.</strong> CHE 480: building the Haber process up one tutorial at a time.</li>
+          <li><strong>Model vs hardware.</strong> Capstone CFD/FEA and battery cycling, and learning where they disagree.</li>
+          <li><strong>Computer vision on the shop floor.</strong> CCTV into flow and utilization numbers a terminal manager can trust.</li>
+        </ul>
+      </article>
+    </div>
+    <div class="step" data-stage="lab" data-key="close">
+      <article class="panel">
+        <p class="eyebrow">Learning · Side projects</p>
+        <h2>Next on the list</h2>
+        <ul class="ticks">
+          <li><strong>A shuttlecock detector.</strong> ShuttleSense's shuttle tracking is still noise; a custom model would let it measure rally outcomes.</li>
+          <li><strong>Stable player identities.</strong> Tracking that doesn't split two players into sixty when they cross at the net.</li>
+          <li><strong>Fine-tuning time-series models.</strong> Going past running Kronos to fine-tuning it on my own data.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
 
-<p class="pline">A forecasting dashboard that grades its own predictions against what the market actually did.</p>
-<p class="meta"><span>2026</span><span>Python, PyTorch, Streamlit, yfinance, Plotly</span><a href="https://github.com/ayyappan04/Kronos">Repository</a></p>
-</header>
-<div aria-label="Kronos details" class="ptabs" role="tablist">
-<button aria-selected="true" role="tab">What it is</button>
-<button aria-selected="false" role="tab" tabindex="-1">The model</button>
-<button aria-selected="false" role="tab" tabindex="-1">Keeping score</button>
-</div>
-<div class="ppanels">
-<div role="tabpanel">
-<p>I forked <a href="https://github.com/shiyu-coder/Kronos">Kronos</a>, an open-source foundation model for financial candlestick data, and built a six-tab Streamlit dashboard on top of it to track an eight-stock watchlist.</p>
-<dl class="facts">
-<div><dt>Overview</dt><dd>Risk-weighted allocation, live prices, sector breakdown</dd></div>
-<div><dt>Analysis</dt><dd>Candlesticks with MA20/MA50, RSI(14), volume and return distribution</dd></div>
-<div><dt>Forecast</dt><dd>30-day OHLCV forecast per ticker, saved as a dated snapshot</dd></div>
-<div><dt>Forecast vs actual</dt><dd>Prediction band overlaid on real prices as the days pass</dd></div>
-<div><dt>Research</dt><dd>Thesis, catalysts and risks for each stock</dd></div>
-<div><dt>Allocation</dt><dd>Weight sliders with share counts and concentration risk</dd></div>
-</dl>
-</div>
-<div hidden="" role="tabpanel">
-<p>Kronos treats market data like a language. A tokenizer first turns each candlestick (open, high, low, close, volume) into hierarchical discrete tokens. A decoder-only transformer, pre-trained on data from more than 45 exchanges, then predicts the next tokens the way a language model predicts the next word.</p>
-<ol aria-label="Kronos forecasting steps, in order" class="pipeline small">
-<li>Fetch prices</li><li>Tokenize candles</li><li>Transformer</li><li>30-day forecast</li><li>Save snapshot</li><li>Compare to actual</li>
-</ol>
-<p>The dashboard lets you swap between the mini, small and base model sizes and run on CPU, Apple silicon or CUDA.</p>
-</div>
-<div hidden="" role="tabpanel">
-<p>A forecast is only interesting if you check it. Every prediction is saved with its date, and the Forecast vs Actual tab pulls live prices and scores the model day by day on mean absolute error, root-mean-square error and directional accuracy — did it at least get the direction right?</p>
-<p class="muted">It's a learning project about model evaluation, not investment advice.</p>
-</div>
-</div>
-</template>
-<template id="z-purolator">
-<p class="co">Canada's courier and freight network. Co-op that became a part-time role alongside school, based in Mississauga.</p>
-<ul>
-<li>Interviewed 40+ operations managers across Canada and found labour-hour, overtime and payroll data didn't agree. Built the business case and evaluation matrix with managers and a director, prototyped an activity-tracking app in Power Apps, and demoed it to terminal managers and Finance. Rollout improved labour-data accuracy by 24%.</li>
-<li>Building a computer-vision monitoring system on existing CCTV feeds to measure package flow, area headcount, utilization and operator motion. Pilot models project 28% fewer labour hours and 32% higher productivity.</li>
-<li>Built a Factory I/O digital twin that turns package-volume mix into staffing, throughput and capacity scenarios, so managers can test a plan before running it. It projects 22% fewer labour hours and 31% lower cost.</li>
-<li>Ran MOST time studies and cycle-time analysis across sortation and courier workflows to set labour standards and document standard work.</li>
-</ul>
-<p class="stack">Power Apps, Factory I/O, OpenCV, MOST, 5S, Lean Six Sigma</p>
-</template>
-<template id="z-waize">
-<p class="co">A Toronto studio that builds custom software, automation and applied AI around how a business actually runs.</p>
-<ul>
-<li>Own customer discovery, workflow mapping, scoping, demos and delivery across 10+ AI projects, prioritising by impact, price, maintenance and feasibility.</li>
-<li>For a clinic, launched voice agents for scheduling, cancellations, follow-ups and calendar/CRM integration. Bookings rose 9% after deployment.</li>
-</ul>
-<p class="stack">Voice agents, workflow automation, client discovery, pricing and scoping</p>
-</template>
-<template id="z-promptogo">
-<p class="co">In-person AI classes where teens 13 and up build real games, websites and apps, in London, Ontario and North York. I design the curriculum.</p>
-<ul>
-<li>Grew from 20 students in cohort 1 to 40 in cohort 2. 100% of students who reached the completion checkpoint finished, and 95% continued to the next course.</li>
-<li>Recruited, onboarded and trained 12 instructors.</li>
-<li>Ran 20 student and parent interviews and turned them into curriculum changes. After launching referrals and multi-signup, acquisition rose 18% and pitch-to-enrolment conversion rose 23%.</li>
-</ul>
-<p class="stack">Curriculum design, user research, growth, hiring</p>
-</template>
-<template id="z-hgc">
-<p class="co">An acoustical engineering consultancy in Mississauga covering environmental noise, vibration and land-use approvals.</p>
-<ul>
-<li>Paired field measurements with CadnaA noise modelling to deliver compliance-ready engineering reports.</li>
-<li>Automated the proposal workflow, cutting turnaround time by 50% and making technical outputs more repeatable.</li>
-</ul>
-<p class="stack">CadnaA, field acoustics, Python automation</p>
-</template>
-<template id="z-uw">
-<p class="co">Uranium process research, looking for improvements that hold up under operating and regulatory constraints.</p>
-<ul>
-<li>Structured process and regulatory datasets in SQL and built lifecycle and process models in OpenLCA.</li>
-<li>Built Power BI decision-support analysis that identified scenarios with up to $20M in potential savings and 15% lower emissions, and presented the findings to 30+ stakeholders.</li>
-</ul>
-<p class="stack">SQL, OpenLCA, Power BI, lifecycle assessment</p>
-</template>
-<template id="z-pwc">
-<p class="co">Risk Services in Toronto.</p>
-<ul>
-<li>Evaluated AI-enabled underwriting and client-operations products across data preparation, model workflows, governance, controls and rollout readiness.</li>
-<li>Identified quality and risk gaps and walked business and technical stakeholders through the mitigation recommendations.</li>
-</ul>
-<p class="stack">AI governance, controls testing, stakeholder communication</p>
-</template>
-<template id="z-mto">
-<p class="co">The ministry that plans and maintains Ontario's provincial highways and bridges. Based in Toronto.</p>
-<ul>
-<li>Built and historically validated a multivariate model, 95% accurate, that combines condition, traffic, deterioration, weather, cost and prior-work quality to forecast when assets need rehabilitation or expansion.</li>
-<li>Built Power BI and ArcGIS analytics across a $700M asset portfolio.</li>
-<li>Co-developed a provincially used Ride Quality Index with University of Toronto researchers to standardise performance measurement and capital prioritisation.</li>
-</ul>
-<p class="stack">Predictive modelling, Power BI, ArcGIS</p>
-</template>
-<template id="z-gip">
-<p class="co">Green Infrastructure Partners: Canadian construction materials and infrastructure, with 40+ asphalt plants and 250+ pits and quarries. I worked mainly in the Caledon recycled-asphalt lab, plus the aggregate and concrete labs.</p>
-<ul>
-<li>Ran destructive and non-destructive QA on 150+ asphalt, aggregate and cement samples under controlled temperature, pressure, curing and moisture, keeping traceable records used for release decisions.</li>
-<li>Ran time studies and sequencing analysis with the plant team, found the workflow constraints, and implemented changes that raised production efficiency by 18% without loosening safety or quality requirements.</li>
-</ul>
-<p class="stack">Materials testing, QA/QC, time studies, technical reports</p>
-</template>
-<template id="z-learning"><p>Fall 2026, my 4A term. Some of it is coursework, most of it is whatever my projects broke this week.</p><ul class="learn">
-<li>
-<h3>Plant design in Aspen Plus</h3>
-<p>CHE 480, Process Analysis and Design. Building the Haber process up one tutorial at a time, from feed conditioning to the synthesis loop.</p>
-</li>
-<li>
-<h3>Validating a model against hardware</h3>
-<p>Capstone. ANSYS CFD/FEA and battery cycling tests, and learning where a first-principles model and a test bench disagree.</p>
-</li>
-<li>
-<h3>Training a shuttlecock detector</h3>
-<p>ShuttleSense's shuttle tracking is still noise. Next step is a custom-trained detection model, so rally outcomes can finally be measured instead of skipped.</p>
-</li>
-<li>
-<h3>Keeping player identities stable</h3>
-<p>Multi-object tracking that doesn't split two players into sixty tracks when they cross at the net.</p>
-</li>
-<li>
-<h3>Fine-tuning time-series foundation models</h3>
-<p>Going past running Kronos to fine-tuning its tokenizer and predictor on my own data, and evaluating the result honestly.</p>
-</li>
-<li>
-<h3>Computer vision on the shop floor</h3>
-<p>At Purolator: turning CCTV into reliable flow and utilization numbers that a terminal manager can trust.</p>
-</li>
-</ul></template>
-<template id="z-welcome"><p class="lede">I'm a chemical engineering student at the University of Waterloo and a process engineer at Purolator. This island is my portfolio: walk into any building or court to read about it.</p>
-<ul class="how">
-<li><strong>Move</strong> with WASD or the arrow keys, or click the ground to walk there. On a phone, use the joystick or tap.</li>
-<li><strong>Look around</strong> by dragging. Scroll to zoom.</li>
-<li><strong>Jump</strong> to an area with the buttons at the top, or click any label or the map.</li>
-</ul>
-<div class="jump">
-<button type="button" class="tile" data-action="go:hobbies"><strong>Hobbies</strong><span>Badminton hall, soccer pitch, campus</span></button>
-<button type="button" class="tile" data-action="go:projects"><strong>Projects</strong><span>ShuttleSense, TEG simulator, Kronos</span></button>
-<button type="button" class="tile" data-action="go:career"><strong>Career street</strong><span>Six co-op offices, two ventures</span></button>
-<button type="button" class="tile" data-action="go:learning"><strong>Learning lab</strong><span>What I'm working on now</span></button>
-</div>
-<p class="links"><a href="https://github.com/ayyappan04">GitHub</a><a href="https://linkedin.com/in/ayyappan-s-arun">LinkedIn</a><a href="mailto:ayyappanarun28@gmail.com">ayyappanarun28@gmail.com</a></p></template>
+  <section data-chapter-id="contact">
+    <div class="step" data-stage="studio" data-key="end">
+      <article class="panel">
+        <h2>Let's talk</h2>
+        <p>Process engineering, computer vision, energy systems or badminton.</p>
+        <p class="cta"><a class="btn" href="mailto:ayyappanarun28@gmail.com">ayyappanarun28@gmail.com</a></p>
+        <p class="links"><a href="https://github.com/ayyappan04">GitHub</a><a href="https://linkedin.com/in/ayyappan-s-arun">LinkedIn</a></p>
+        <details class="credits"><summary>Photo and data credits</summary>
+          <p>Photos from Wikimedia Commons under their stated licences: shuttlecocks (Arne Nordmann, CC BY-SA 3.0), badminton court (Ruturajpol, CC BY-SA 4.0), Lee Chong Wei (Antony Stanley, CC BY-SA 2.0), Messi (Tsutomu Takasu, CC BY 2.0), Camp Nou (Oh-Barcelona.com, CC BY 2.0), Waterloo Engineering sign (Maplefirst, CC BY-SA 4.0), data centre (BalticServers.com, CC BY-SA 3.0), Purolator facility (jmv, CC BY-SA 2.0), Purolator truck (Raysonho, CC0), Argentia Rd sign (Transportfan70, CC BY-SA 4.0), Engineering 6 (Victor Vucicevich, CC BY-SA 3.0), E5 and E6 (Kiyan, CC BY-SA 2.0), highway interchange (Coolcaesar, CC BY 4.0), Caledon (P199, CC BY-SA 3.0).</p>
+          <p>Map: Natural Earth (public domain). Textures and sunset HDR: three.js example assets. Kronos chart: shiyu-coder/Kronos (MIT).</p>
+        </details>
+      </article>
+    </div>
+  </section>
+</main>
 
-<script type="module" src="js/main.js"></script>
+<dialog id="lightbox"><figure><img alt=""><figcaption></figcaption></figure></dialog>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
